@@ -1,7 +1,7 @@
 #include "wifi.h"
 
 const char *TAG_W = "WIFI";
-uint8_t connected_w = WATING_CONEXION, ip_flag;
+uint8_t connected_w = WATING_CONNEXION, ip_flag;
 
 static int retry_count = 0;
 
@@ -51,7 +51,7 @@ void wifi_event_handler(void *event_handler_arg, esp_event_base_t event_base, in
     }
 }
 
-void wifi_connect()
+void wifi_connect(char *ssid, char *password)
 {
     ip_flag = 0;
     esp_err_t error = nvs_flash_init();
@@ -72,8 +72,11 @@ void wifi_connect()
 
     wifi_config_t wifi_configuration = {
         .sta = {
-            .ssid = SSID,
-            .password = PASS}};
+            .ssid = "\0",
+            .password = "\0"}};
+
+    strncpy((char*)wifi_configuration.sta.ssid, ssid, sizeof(wifi_configuration.sta.ssid) - 1);
+    strncpy((char*)wifi_configuration.sta.password, password, sizeof(wifi_configuration.sta.password) - 1);
     
     ESP_LOGI(TAG_W, "Wifi SSID: %s", (char*)wifi_configuration.sta.ssid);
     ESP_LOGI(TAG_W, "Wifi PASS: %s", (char*)wifi_configuration.sta.password);
@@ -82,12 +85,12 @@ void wifi_connect()
     esp_wifi_set_mode(WIFI_MODE_STA);
     esp_wifi_start();
 
-    ESP_LOGE(TAG, "Wating for connexion....");
+    ESP_LOGE(TAG_W, "Wating for connexion....");
     while(ip_flag == 0)
     {
         if(connected_w == FAILED)
         {
-            ESP_LOGE(TAG, "Wifi conexion failed...");
+            ESP_LOGE(TAG_W, "Wifi conexion failed...");
             break;
         }
         vTaskDelay(pdMS_TO_TICKS(50));

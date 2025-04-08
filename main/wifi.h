@@ -24,10 +24,6 @@
 #define MAX_RETRY 3
 #define IP_LENGHT 50
 
-
-#define SSID "COTA_PC"
-#define PASS "0402{V8z"
-
 extern const char *TAG_W;
 extern uint8_t connected_w, ip_flag;
 
