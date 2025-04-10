@@ -25,6 +25,8 @@ void app_main(void)
         esp_restart();
     }
 
+    //check internet task/timer
+
     tcp_client(HOST_IP_ADDR, PORT);
 
     while(1)

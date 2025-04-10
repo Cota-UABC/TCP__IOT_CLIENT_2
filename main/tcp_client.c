@@ -22,7 +22,7 @@ void tcp_task(void *pvParameters)
     struct timeval timeout;
 
     if(tcp_init_connect(&dest_addr, &sock, &timeout, params->host, params->port))
-        tcp_communicate(&sock); //WIP   
+        tcp_communicate(&sock); //task 
     else
         ESP_LOGE(TAG_T, "Tcp init failed");
 
