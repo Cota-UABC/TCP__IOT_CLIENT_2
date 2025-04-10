@@ -68,21 +68,30 @@ void tcp_communicate(int *sock_ptr)
 {    
     char rx_buffer[STR_LEN], tx_buffer[STR_LEN];
 
+    build_command(tx_buffer, "UABC", "a1264598", "L", "\0");
+    transmit_receive(rx_buffer, tx_buffer, sock_ptr);
+
+    
+    build_command(tx_buffer, "UABC", "a1264598", "K", "\0");
+
     while(1)
     {
-        build_command(tx_buffer, "UABC", "a1264598", "L", "\0");
-
-        send(*sock_ptr, tx_buffer, strlen(tx_buffer), 0);
-        ESP_LOGI(TAG_T, "TX: %s", tx_buffer);
-
-        int len = recv(*sock_ptr, rx_buffer, sizeof(rx_buffer) - 1, 0);
-        
-        if (len > 0) {
-            rx_buffer[len] = '\0';
-            ESP_LOGI(TAG_T, "RX: %s", rx_buffer);
-        }
+        transmit_receive(rx_buffer, tx_buffer, sock_ptr);
 
         vTaskDelay(pdMS_TO_TICKS(10000));
+    }
+}
+
+void transmit_receive(char *rx_buffer, char *tx_buffer, int *sock_ptr)
+{
+    send(*sock_ptr, tx_buffer, strlen(tx_buffer), 0);
+    ESP_LOGI(TAG_T, "TX: %s", tx_buffer);
+
+    int len = recv(*sock_ptr, rx_buffer, sizeof(rx_buffer) - 1, 0);
+    
+    if (len > 0) {
+        rx_buffer[len] = '\0';
+        ESP_LOGI(TAG_T, "RX: %s", rx_buffer);
     }
 }
 

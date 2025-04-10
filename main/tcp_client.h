@@ -27,6 +27,8 @@ uint8_t tcp_init_connect(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, struc
 
 void tcp_communicate(int *sock_ptr);
 
+void transmit_receive(char *tx_buffer, char *rx_buffer, int *sock_ptr);
+
 void build_command(char *string_com, ...);
 
 #endif 
