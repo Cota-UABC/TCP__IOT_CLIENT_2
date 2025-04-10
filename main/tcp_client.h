@@ -25,9 +25,15 @@ void tcp_task(void *pvParameters);
 
 uint8_t tcp_init_connect(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, struct timeval *timeout_ptr, char *host, int port);
 
+void transmit_receive(char *tx_buffer, char *rx_buffer, int *sock_ptr);
+
 void tcp_communicate(int *sock_ptr);
 
-void transmit_receive(char *tx_buffer, char *rx_buffer, int *sock_ptr);
+uint8_t login(char *tx_buffer, char *rx_buffer, int *sock_ptr);
+
+void keep_alive(char *tx_buffer, char *rx_buffer, int *sock_ptr);
+
+uint8_t check_ack(char *rx_buffer)
 
 void build_command(char *string_com, ...);
 

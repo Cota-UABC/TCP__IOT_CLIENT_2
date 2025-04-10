@@ -64,25 +64,7 @@ uint8_t tcp_init_connect(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, struc
     return 1;
 }
 
-void tcp_communicate(int *sock_ptr)
-{    
-    char rx_buffer[STR_LEN], tx_buffer[STR_LEN];
-
-    build_command(tx_buffer, "UABC", "a1264598", "L", "\0");
-    transmit_receive(rx_buffer, tx_buffer, sock_ptr);
-
-    
-    build_command(tx_buffer, "UABC", "a1264598", "K", "\0");
-
-    while(1)
-    {
-        transmit_receive(rx_buffer, tx_buffer, sock_ptr);
-
-        vTaskDelay(pdMS_TO_TICKS(10000));
-    }
-}
-
-void transmit_receive(char *rx_buffer, char *tx_buffer, int *sock_ptr)
+void transmit_receive(char *tx_buffer, char *rx_buffer, int *sock_ptr)
 {
     send(*sock_ptr, tx_buffer, strlen(tx_buffer), 0);
     ESP_LOGI(TAG_T, "TX: %s", tx_buffer);
@@ -92,6 +74,64 @@ void transmit_receive(char *rx_buffer, char *tx_buffer, int *sock_ptr)
     if (len > 0) {
         rx_buffer[len] = '\0';
         ESP_LOGI(TAG_T, "RX: %s", rx_buffer);
+    }
+}
+
+void tcp_communicate(int *sock_ptr)
+{    
+    char tx_buffer[STR_LEN], rx_buffer[STR_LEN];
+
+    //login
+    if(!login(tx_buffer, rx_buffer, sock_ptr))
+        return;
+
+    while(1)
+    {
+        keep_alive(tx_buffer, rx_buffer, sock_ptr);
+
+        vTaskDelay(pdMS_TO_TICKS(10000));
+    }
+}
+
+uint8_t login(char *tx_buffer, char *rx_buffer, int *sock_ptr)
+{
+    build_command(tx_buffer, "UABC", "a1264598", "L", "\0");
+    transmit_receive(tx_buffer, rx_buffer, sock_ptr);
+
+    if(check_ack(rx_buffer))
+    {
+        ESP_LOGI(TAG_T, "Login succesfull");
+        return 1;
+    }
+    else
+    {
+        ESP_LOGE(TAG_T, "Login failed...");
+        return 0;
+    }
+}
+
+void keep_alive(char *tx_buffer, char *rx_buffer, int *sock_ptr)
+{
+    build_command(tx_buffer, "UABC", "a1264598", "K", "\0");
+
+    transmit_receive(tx_buffer, rx_buffer, sock_ptr);
+
+    if(strcmp(rx_buffer, "ACK") =! 0)
+        ESP_LOGE(TAG_T, "Acknowledge not received...");
+
+}
+
+uint8_t check_ack(char *rx_buffer)
+{
+    if(strcmp(rx_buffer, "ACK") =! 0)
+    {
+        ESP_LOGE(TAG_T, "Acknowledge not received...");
+        return 0;
+    }
+    else
+    {
+        ESP_LOGI(TAG_T, "Acknowledge received");
+        return 1;
     }
 }
 

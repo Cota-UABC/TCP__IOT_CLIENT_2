@@ -1,4 +1,6 @@
 #include "esp_log.h"
+#include "esp_system.h"
+
 #include <string.h>
 
 #include "tcp_client.h"
@@ -16,7 +18,12 @@ const char *TAG = "MAIN";
 
 void app_main(void)
 {
-    wifi_connect(SSID, PASS); //WIP return state
+    if(!wifi_connect(SSID, PASS))
+    {
+        ESP_LOGE(TAG_W, "Could not connect to wifi, restarting...");
+        vTaskDelay(pdMS_TO_TICKS(5000));
+        esp_restart();
+    }
 
     tcp_client(HOST_IP_ADDR, PORT);
 
