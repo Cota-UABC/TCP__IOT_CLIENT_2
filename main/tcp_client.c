@@ -2,15 +2,19 @@
 
 static const char *TAG_T = "tcp_client";
 
-void tcp_client(char *host, int port) 
+void tcp_client_main(char *host, int port, char *local_host, int local_port) 
 {
     //tcp parameters
     task_tcp_params_t *tcp_params = malloc(sizeof(task_tcp_params_t));
     strncpy(tcp_params->host, host, sizeof(tcp_params->host)); 
     tcp_params->port = port;
+    strncpy(tcp_params->local_host, local_host, sizeof(tcp_params->local_host)); 
+    tcp_params->local_port = local_port;
 
     //create tcp task
     xTaskCreate(tcp_task, "tcp_task", 4096, tcp_params, 4, NULL);
+
+    //internet check task
 }
 
 void tcp_task(void *pvParameters)
@@ -21,11 +25,12 @@ void tcp_task(void *pvParameters)
     int sock;
     struct timeval timeout;
 
-    if(tcp_init_connect(&dest_addr, &sock, &timeout, params->host, params->port))
-        tcp_communicate(&sock); //task 
-    else
-        ESP_LOGE(TAG_T, "Tcp init failed");
+    esp_err_t res = tcp_init_connect(&dest_addr, &sock, &timeout, params->host, params->port);
+    
+    if(res == ESP_OK)
+        tcp_communicate_loop(&sock);
 
+    //close resources
     free(params);
 
     ESP_LOGE(TAG_T, "Closing socket...");
@@ -36,7 +41,7 @@ void tcp_task(void *pvParameters)
     vTaskDelete(NULL);
 }
 
-uint8_t tcp_init_connect(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, struct timeval *timeout_ptr, char *host, int port)
+esp_err_t tcp_init_connect(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, struct timeval *timeout_ptr, char *host, int port)
 {
     dest_addr_ptr->sin_addr.s_addr = inet_addr(host);
     dest_addr_ptr->sin_family = AF_INET;
@@ -45,7 +50,7 @@ uint8_t tcp_init_connect(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, struc
     *sock_ptr = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
     if (*sock_ptr < 0) {
         ESP_LOGE(TAG_T, "Unable to create socket");
-        return 0;
+        return ESP_FAIL;
     }
     ESP_LOGW(TAG_T, "Socket created, connecting to %s:%d...", host, port);
 
@@ -57,27 +62,14 @@ uint8_t tcp_init_connect(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, struc
     if (connect(*sock_ptr, (struct sockaddr *)dest_addr_ptr, sizeof(*dest_addr_ptr)) != 0) {
         ESP_LOGE(TAG_T, "Socket unable to connect");
         close(*sock_ptr);
-        return 0;
+        return ESP_FAIL;
     }
     ESP_LOGI(TAG_T, "Successfully connected to %s:%d", host, port);
 
-    return 1;
+    return ESP_OK;
 }
 
-void transmit_receive(char *tx_buffer, char *rx_buffer, int *sock_ptr)
-{
-    send(*sock_ptr, tx_buffer, strlen(tx_buffer), 0);
-    ESP_LOGI(TAG_T, "TX: %s", tx_buffer);
-
-    int len = recv(*sock_ptr, rx_buffer, sizeof(rx_buffer) - 1, 0);
-    
-    if (len > 0) {
-        rx_buffer[len] = '\0';
-        ESP_LOGI(TAG_T, "RX: %s", rx_buffer);
-    }
-}
-
-void tcp_communicate(int *sock_ptr)
+void tcp_communicate_loop(int *sock_ptr)
 {    
     char tx_buffer[STR_LEN], rx_buffer[STR_LEN];
 
@@ -90,6 +82,19 @@ void tcp_communicate(int *sock_ptr)
         keep_alive(tx_buffer, rx_buffer, sock_ptr);
 
         vTaskDelay(pdMS_TO_TICKS(10000));
+    }
+}
+
+void transmit_receive(char *tx_buffer, char *rx_buffer, int *sock_ptr)
+{
+    send(*sock_ptr, tx_buffer, strlen(tx_buffer), 0);
+    ESP_LOGI(TAG_T, "TX: %s", tx_buffer);
+
+    int len = recv(*sock_ptr, rx_buffer, sizeof(rx_buffer) - 1, 0);
+    
+    if (len > 0) {
+        rx_buffer[len] = '\0';
+        ESP_LOGI(TAG_T, "RX: %s", rx_buffer);
     }
 }
 
@@ -156,4 +161,47 @@ void build_command(char *string_com, ...)
         strcat(string_com, ":");
     }
     va_end(args);
+}
+
+//check connection to google
+void check_internet_connection(void *pvParameters)
+{
+    uint8_t flag = 0; //WIP semaphore
+    char local_buffer[1024];
+
+    while(1)
+    {
+        struct sockaddr_in dest_addr;
+        int sock;
+        struct timeval timeout;
+
+        if(!tcp_init_connect(&dest_addr, &sock, &timeout, HOST_GOOGLE, PORT_GOOGLE) == ESP_OK)
+            //
+
+        strcpy(local_buffer, "GET / HTTP/1.1\r\nHost: google.com\r\nConnection: close\r\n\r\n");
+
+        //send hhtp request
+        send(sock, local_buffer, strlen(local_buffer), 0);  
+        ESP_LOGI(TAG_T, "Message send to %s (%d bytes)", HOST_GOOGLE, strlen(local_buffer));
+
+        //receive text
+        int len = recv(sock, local_buffer, sizeof(local_buffer) - 1, 0);
+        if(len < 0) 
+        {
+            ESP_LOGE(TAG_T, "Error occurred during receiving: errno %d", errno);
+            break;
+        }
+
+        local_buffer[len] = '\0'; // terminator
+        ESP_LOGI(TAG_T, "Received %d bytes", len);
+        ESP_LOGI(TAG_T, "There is an internet connection.");
+        connection_f = 1;
+
+        break;
+    }
+    ESP_LOGE(TAG_T, "Closing google socket...");
+    shutdown(sock, 0);
+    close(sock);
+
+    return connection_f;
 }

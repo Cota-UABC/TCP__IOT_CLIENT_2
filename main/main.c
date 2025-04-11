@@ -13,8 +13,11 @@ const char *TAG = "MAIN";
 #define PASS "Qxm2EAzh99Ce7Lfk"
 
 //tcp host and port
-#define HOST_IP_ADDR "192.168.100.9" 
-#define PORT 8090
+#define IOT_IP_ADDR "82.180.173.228" 
+#define IOT_PORT 8090
+
+#define LOCAL_IP_ADDR "192.168.100.9" 
+#define LOCAL_PORT 8670
 
 void app_main(void)
 {
@@ -25,9 +28,7 @@ void app_main(void)
         esp_restart();
     }
 
-    //check internet task/timer
-
-    tcp_client(HOST_IP_ADDR, PORT);
+    tcp_client_main(IOT_IP_ADDR, IOT_PORT, LOCAL_IP_ADDR, LOCAL_PORT);
 
     while(1)
     {
