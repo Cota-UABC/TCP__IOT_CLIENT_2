@@ -4,17 +4,21 @@ static const char *TAG_T = "tcp_client";
 
 void tcp_client_main(char *host, int port, char *local_host, int local_port) 
 {
-    //tcp parameters
     task_tcp_params_t *tcp_params = malloc(sizeof(task_tcp_params_t));
+    SemaphoreHandle_t xSemaphore_internet = xSemaphoreCreateMutex();
+
+    //tcp parameters
     strncpy(tcp_params->host, host, sizeof(tcp_params->host)); 
     tcp_params->port = port;
     strncpy(tcp_params->local_host, local_host, sizeof(tcp_params->local_host)); 
     tcp_params->local_port = local_port;
+    tcp_params->xSemaphore_internet = xSemaphore_internet;
 
     //create tcp task
-    xTaskCreate(tcp_task, "tcp_task", 4096, tcp_params, 4, NULL);
+    xTaskCreate(tcp_task, "tcp_task", 4096, (void *)tcp_params, 4, NULL);
 
     //internet check task
+    xTaskCreate(check_internet_task, "check_internet_task", 4096, (void *)xSemaphore_internet, 4, NULL);
 }
 
 void tcp_task(void *pvParameters)
@@ -25,11 +29,16 @@ void tcp_task(void *pvParameters)
     int sock;
     struct timeval timeout;
 
-    esp_err_t res = tcp_init_connect(&dest_addr, &sock, &timeout, params->host, params->port);
+    if(tcp_create_socket(&dest_addr, &sock, params->host, params->port) == ESP_OK)
+    {
+        if(tcp_connect_to_host(&dest_addr, &sock, &timeout, params->host, params->port) == ESP_OK)
+            tcp_communicate_loop(&sock);
+        else
+            ESP_LOGE(TAG_T, "Host connection failed...");
+    }
+    else
+        ESP_LOGE(TAG_T, "Socket creation failed...");
     
-    if(res == ESP_OK)
-        tcp_communicate_loop(&sock);
-
     //close resources
     free(params);
 
@@ -41,8 +50,10 @@ void tcp_task(void *pvParameters)
     vTaskDelete(NULL);
 }
 
-esp_err_t tcp_init_connect(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, struct timeval *timeout_ptr, char *host, int port)
+esp_err_t tcp_create_socket(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, char *host, int port)
 {
+    ESP_LOGW(TAG_T, "Creating socket...");
+
     dest_addr_ptr->sin_addr.s_addr = inet_addr(host);
     dest_addr_ptr->sin_family = AF_INET;
     dest_addr_ptr->sin_port = htons(port);
@@ -52,21 +63,28 @@ esp_err_t tcp_init_connect(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, str
         ESP_LOGE(TAG_T, "Unable to create socket");
         return ESP_FAIL;
     }
-    ESP_LOGW(TAG_T, "Socket created, connecting to %s:%d...", host, port);
+    ESP_LOGI(TAG_T, "Socket created successfully");
 
-    // Set timeout
-    timeout_ptr->tv_sec = 1;
-    timeout_ptr->tv_usec = 0;
-    setsockopt(*sock_ptr, SOL_SOCKET, SO_RCVTIMEO, timeout_ptr, sizeof *timeout_ptr);
+    return ESP_OK;
+}
 
-    if (connect(*sock_ptr, (struct sockaddr *)dest_addr_ptr, sizeof(*dest_addr_ptr)) != 0) {
+esp_err_t tcp_connect_to_host(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, struct timeval *timeout_ptr, char *host, int port)
+{
+    ESP_LOGW(TAG_T, "Connecting to host: %s:%d...", host, port);
+
+     // Set timeout
+     timeout_ptr->tv_sec = 1;
+     timeout_ptr->tv_usec = 0;
+     setsockopt(*sock_ptr, SOL_SOCKET, SO_RCVTIMEO, timeout_ptr, sizeof *timeout_ptr);
+ 
+     if (connect(*sock_ptr, (struct sockaddr *)dest_addr_ptr, sizeof(*dest_addr_ptr)) != 0) {
         ESP_LOGE(TAG_T, "Socket unable to connect");
         close(*sock_ptr);
         return ESP_FAIL;
-    }
-    ESP_LOGI(TAG_T, "Successfully connected to %s:%d", host, port);
+     }
+     ESP_LOGI(TAG_T, "Successfully connected to %s:%d", host, port);
 
-    return ESP_OK;
+     return ESP_OK;
 }
 
 void tcp_communicate_loop(int *sock_ptr)
@@ -164,10 +182,14 @@ void build_command(char *string_com, ...)
 }
 
 //check connection to google
-void check_internet_connection(void *pvParameters)
+void check_internet_task(void *pvParameter)
 {
-    uint8_t flag = 0; //WIP semaphore
-    char local_buffer[1024];
+    SemaphoreHandle_t xSemaphore_internet = (SemaphoreHandle_t) pvParameter;
+
+    uint8_t internet_f = TRUE; 
+    char tx_message[STR_LEN*2], rx_buffer[STR_LEN];
+
+    strcpy(tx_message, "GET / HTTP/1.1\r\nHost: google.com\r\nConnection: close\r\n\r\n");
 
     while(1)
     {
@@ -175,14 +197,20 @@ void check_internet_connection(void *pvParameters)
         int sock;
         struct timeval timeout;
 
-        if(!tcp_init_connect(&dest_addr, &sock, &timeout, HOST_GOOGLE, PORT_GOOGLE) == ESP_OK)
-            //
-
-        strcpy(local_buffer, "GET / HTTP/1.1\r\nHost: google.com\r\nConnection: close\r\n\r\n");
+        if(tcp_create_socket(&dest_addr, &sock, params->host, params->port) != ESP_OK)
+        {
+            ESP_LOGE(TAG_T, "Failed to initialize internet socket...");
+            break;
+        }
+        else if(tcp_connect_to_host(&dest_addr, &sock, &timeout, params->host, params->port) != ESP_OK)
+        {
+            ESP_LOGE(TAG_T, "Failed to connect to google host...");
+            break;//mutex
+        }
 
         //send hhtp request
-        send(sock, local_buffer, strlen(local_buffer), 0);  
-        ESP_LOGI(TAG_T, "Message send to %s (%d bytes)", HOST_GOOGLE, strlen(local_buffer));
+        send(sock, tx_message, strlen(tx_message), 0);  
+        ESP_LOGI(TAG_T, "Message send to %s (%d bytes)", HOST_GOOGLE, strlen(tx_message));
 
         //receive text
         int len = recv(sock, local_buffer, sizeof(local_buffer) - 1, 0);
@@ -192,16 +220,19 @@ void check_internet_connection(void *pvParameters)
             break;
         }
 
-        local_buffer[len] = '\0'; // terminator
         ESP_LOGI(TAG_T, "Received %d bytes", len);
         ESP_LOGI(TAG_T, "There is an internet connection.");
-        connection_f = 1;
+        internet_f = TRUE;
 
-        break;
+        vTaskDelay(pdMS_TO_TICKS(INTERNET_CHECK_MS_WAIT));
     }
-    ESP_LOGE(TAG_T, "Closing google socket...");
+    //close resources
+    vSemaphoreDelete(xSemaphore_internet);
+
+    ESP_LOGE(TAG_T, "Closing socket...");
     shutdown(sock, 0);
     close(sock);
 
-    return connection_f;
+    ESP_LOGE(TAG_T, "Closing internet task...");
+    vTaskDelete(NULL);
 }
