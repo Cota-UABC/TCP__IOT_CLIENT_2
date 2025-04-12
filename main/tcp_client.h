@@ -19,7 +19,7 @@
 #define HOST_GOOGLE "142.250.188.14" //Google
 #define PORT_GOOGLE 80
 
-#define INTERNET_CHECK_MS_WAIT 1000
+#define INTERNET_CHECK_MS_WAIT 10000
 
 #define TRUE 1
 #define FALSE 0

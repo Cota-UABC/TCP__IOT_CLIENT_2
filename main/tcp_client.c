@@ -29,15 +29,12 @@ void tcp_task(void *pvParameters)
     int sock;
     struct timeval timeout;
 
-    if(tcp_create_socket(&dest_addr, &sock, params->host, params->port) == ESP_OK)
-    {
-        if(tcp_connect_to_host(&dest_addr, &sock, &timeout, params->host, params->port) == ESP_OK)
-            tcp_communicate_loop(&sock);
-        else
-            ESP_LOGE(TAG_T, "Host connection failed...");
-    }
-    else
+    if(tcp_create_socket(&dest_addr, &sock, params->host, params->port) != ESP_OK)
         ESP_LOGE(TAG_T, "Socket creation failed...");
+    else if(tcp_connect_to_host(&dest_addr, &sock, &timeout, params->host, params->port) != ESP_OK)
+        ESP_LOGE(TAG_T, "Host connection failed...");
+    else
+        tcp_communicate_loop(&sock);
     
     //close resources
     free(params);
@@ -193,19 +190,27 @@ void check_internet_task(void *pvParameter)
 
     while(1)
     {
+        ESP_LOGW(TAG_T, "Pinging Google...");
+
         struct sockaddr_in dest_addr;
         int sock;
         struct timeval timeout;
 
-        if(tcp_create_socket(&dest_addr, &sock, params->host, params->port) != ESP_OK)
+        if(tcp_create_socket(&dest_addr, &sock, HOST_GOOGLE, PORT_GOOGLE) != ESP_OK)
         {
             ESP_LOGE(TAG_T, "Failed to initialize internet socket...");
-            break;
+            continue;
         }
-        else if(tcp_connect_to_host(&dest_addr, &sock, &timeout, params->host, params->port) != ESP_OK)
+        else if(tcp_connect_to_host(&dest_addr, &sock, &timeout, HOST_GOOGLE, PORT_GOOGLE) != ESP_OK)
         {
             ESP_LOGE(TAG_T, "Failed to connect to google host...");
-            break;//mutex
+            if(xSemaphoreTake(xSemaphore_internet, portMAX_DELAY) == pdTRUE)
+            {
+                internet_f = FALSE; 
+
+                xSemaphoreGive(xSemaphore_internet);
+            }
+            continue;
         }
 
         //send hhtp request
@@ -217,12 +222,23 @@ void check_internet_task(void *pvParameter)
         if(len < 0) 
         {
             ESP_LOGE(TAG_T, "Error occurred during receiving: errno %d", errno);
-            break;
+            if(xSemaphoreTake(xSemaphore_internet, portMAX_DELAY) == pdTRUE)
+            {
+                internet_f = FALSE; 
+
+                xSemaphoreGive(xSemaphore_internet);
+            }
+            continue;
         }
 
         ESP_LOGI(TAG_T, "Received %d bytes", len);
         ESP_LOGI(TAG_T, "There is an internet connection.");
-        internet_f = TRUE;
+        if(xSemaphoreTake(xSemaphore_internet, portMAX_DELAY) == pdTRUE)
+        {
+            internet_f = TRUE; 
+
+            xSemaphoreGive(xSemaphore_internet);
+        }
 
         vTaskDelay(pdMS_TO_TICKS(INTERNET_CHECK_MS_WAIT));
     }
