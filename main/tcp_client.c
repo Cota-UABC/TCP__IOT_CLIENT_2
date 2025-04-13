@@ -29,12 +29,25 @@ void tcp_task(void *pvParameters)
     int sock;
     struct timeval timeout;
 
+    uint16_t counter = 0;
+
     if(tcp_create_socket(&dest_addr, &sock, params->host, params->port) != ESP_OK)
         ESP_LOGE(TAG_T, "Socket creation failed...");
-    else if(tcp_connect_to_host(&dest_addr, &sock, &timeout, params->host, params->port) != ESP_OK)
-        ESP_LOGE(TAG_T, "Host connection failed...");
-    else
-        tcp_communicate_loop(&sock);
+    else 
+    {
+        while(counter < CONNECT_MAX_RETRY)
+        {
+            ESP_LOGI(TAG_T, "Connecting, attempt %d/%d", counter+1, CONNECT_MAX_RETRY);
+            if(tcp_connect_to_host(&dest_addr, &sock, &timeout, params->host, params->port) != ESP_OK)
+            {
+                ESP_LOGE(TAG_T, "Host connection failed...");
+                counter++;
+            }
+            else
+                tcp_communicate_loop(&sock);
+                //wip check mutex
+        }
+    }
     
     //close resources
     free(params);

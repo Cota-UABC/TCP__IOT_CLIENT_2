@@ -16,6 +16,8 @@
 #define STR_LEN 128
 #define COMMANDS_MAX_QUANTITY 10
 
+#define CONNECT_MAX_RETRY 3
+
 #define HOST_GOOGLE "142.250.188.14" //Google
 #define PORT_GOOGLE 80
 
