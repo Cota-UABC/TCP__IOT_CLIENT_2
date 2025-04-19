@@ -25,39 +25,100 @@ void tcp_task(void *pvParameters)
 {
     task_tcp_params_t *params = (task_tcp_params_t *)pvParameters;
 
-    struct sockaddr_in dest_addr;
-    int sock;
-    struct timeval timeout;
+    uint8_t return_f, counter = 0;
 
-    uint16_t counter = 0;
-
-    if(tcp_create_socket(&dest_addr, &sock, params->host, params->port) != ESP_OK)
-        ESP_LOGE(TAG_T, "Socket creation failed...");
-    else 
+    while(counter < MAX_RETRY)
     {
-        while(counter < CONNECT_MAX_RETRY)
+        counter++;
+
+        //iot server connection
+        ESP_LOGE(TAG_T, "Connecting to IOT server...");
+        return_f = tcp_server_connect(params->host, params->port, FALSE, params->xSemaphore_internet);
+        
+        //local server connection
+        if(return_f == INTERNET_DISCONNECTED)
         {
-            ESP_LOGI(TAG_T, "Connecting, attempt %d/%d", counter+1, CONNECT_MAX_RETRY);
-            if(tcp_connect_to_host(&dest_addr, &sock, &timeout, params->host, params->port) != ESP_OK)
-            {
-                ESP_LOGE(TAG_T, "Host connection failed...");
-                counter++;
-            }
-            else
-                tcp_communicate_loop(&sock);
-                //wip check mutex
+            ESP_LOGE(TAG_T, "Connecting to LOCAL server...");
+            return_f = tcp_server_connect(params->local_host, params->local_port, TRUE, params->xSemaphore_internet);
+            
+            if(return_f == FAIL) continue;
+            if(return_f == INTERNET_CONNECTED) continue;
+            if(return_f == MAX_RETRY) break;
         }
     }
+
     
     //close resources
     free(params);
 
+    ESP_LOGE(TAG_T, "Closing tcp task...");
+    vTaskDelete(NULL);
+}
+
+uint8_t tcp_server_connect(char *host, int port, uint8_t return_on_internet_connection, SemaphoreHandle_t xSemaphore_internet)
+{
+    uint8_t return_f = FAIL, counter = 0, mutex_result;
+
+    struct sockaddr_in dest_addr;
+    int sock;
+    struct timeval timeout;
+
+    if(tcp_create_socket(&dest_addr, &sock, host, port) != ESP_OK)
+    {
+        ESP_LOGE(TAG_T, "Socket creation failed...");
+        return_f = FAIL;
+    }
+    else
+    {
+        while(counter < CONNECT_MAX_RETRY)
+        {
+            ESP_LOGI(TAG_T, "Connecting, attempt %d/%d", counter+1, CONNECT_MAX_RETRY);
+
+            if(tcp_connect_to_host(&dest_addr, &sock, &timeout, host, port) != ESP_OK)
+            {
+                ESP_LOGE(TAG_T, "Host connection failed...");
+                counter++;
+
+                mutex_result; = check_internet_mutex(xSemaphore_internet, 50);
+                
+                if(return_on_internet_connection == TRUE && mutex_result == TRUE)
+                {
+                    return_f = INTERNET_CONNECTED;
+                    break;
+                }
+                if(return_on_internet_connection == FALSE && mutex_result == FALSE)
+                {
+                    return_f = INTERNET_DISCONNECTED;
+                    break;
+                }
+            }
+            else
+            {
+                tcp_communicate_loop(&sock);
+
+                mutex_result; = check_internet_mutex(xSemaphore_internet, 50);
+                
+                if(return_on_internet_connection == TRUE && mutex_result == TRUE)
+                {
+                    return_f = INTERNET_CONNECTED;
+                    break;
+                }
+                if(return_on_internet_connection == FALSE && mutex_result == FALSE)
+                {
+                    return_f = INTERNET_DISCONNECTED;
+                    break;
+                }
+            }
+        }
+        return_f = MAX_RETRY;
+    }
+
+    
     ESP_LOGE(TAG_T, "Closing socket...");
     shutdown(sock, 0);
     close(sock);
 
-    ESP_LOGE(TAG_T, "Closing tcp task...");
-    vTaskDelete(NULL);
+    return return_f;
 }
 
 esp_err_t tcp_create_socket(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, char *host, int port)
@@ -82,19 +143,19 @@ esp_err_t tcp_connect_to_host(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, 
 {
     ESP_LOGW(TAG_T, "Connecting to host: %s:%d...", host, port);
 
-     // Set timeout
-     timeout_ptr->tv_sec = 1;
-     timeout_ptr->tv_usec = 0;
-     setsockopt(*sock_ptr, SOL_SOCKET, SO_RCVTIMEO, timeout_ptr, sizeof *timeout_ptr);
- 
-     if (connect(*sock_ptr, (struct sockaddr *)dest_addr_ptr, sizeof(*dest_addr_ptr)) != 0) {
-        ESP_LOGE(TAG_T, "Socket unable to connect");
-        close(*sock_ptr);
-        return ESP_FAIL;
-     }
-     ESP_LOGI(TAG_T, "Successfully connected to %s:%d", host, port);
+    // Set timeout
+    timeout_ptr->tv_sec = 1;
+    timeout_ptr->tv_usec = 0;
+    setsockopt(*sock_ptr, SOL_SOCKET, SO_RCVTIMEO, timeout_ptr, sizeof *timeout_ptr);
 
-     return ESP_OK;
+    if (connect(*sock_ptr, (struct sockaddr *)dest_addr_ptr, sizeof(*dest_addr_ptr)) != 0) {
+    ESP_LOGE(TAG_T, "Socket unable to connect");
+    close(*sock_ptr);
+    return ESP_FAIL;
+    }
+    ESP_LOGI(TAG_T, "Successfully connected to %s:%d", host, port);
+
+    return ESP_OK;
 }
 
 void tcp_communicate_loop(int *sock_ptr)
@@ -264,4 +325,18 @@ void check_internet_task(void *pvParameter)
 
     ESP_LOGE(TAG_T, "Closing internet task...");
     vTaskDelete(NULL);
+}
+
+uint8_t check_internet_mutex(SemaphoreHandle_t xSemaphore_internet, uint16_t ms_to_wait)
+{
+    uint8_t return_f = UNDEFINED;
+
+    if(xSemaphoreTake(xSemaphore_internet, pdMS_TO_TICKS(ms_to_wait)) == pdTRUE)
+    {
+        return_f = internet_f;
+             
+        xSemaphoreGive(xSemaphore_internet);
+    }
+
+    return return_f;
 }
