@@ -18,7 +18,7 @@ const char *TAG = "MAIN";
 #define IOT_IP_ADDR "82.180.173.228" 
 #define IOT_PORT 8090
 
-#define LOCAL_IP_ADDR "192.168.55.93" 
+#define LOCAL_IP_ADDR "192.168.55.25" 
 #define LOCAL_PORT 8250
 
 void app_main(void)

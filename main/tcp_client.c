@@ -56,33 +56,32 @@ uint8_t tcp_server_connect(char *host, int port)
     struct sockaddr_in dest_addr;
     int sock;
     struct timeval timeout;
+    
+    while(counter < CONNECT_MAX_RETRY)
+    {
+        ESP_LOGI(TAG_T, "Connecting, attempt %d/%d", counter+1, CONNECT_MAX_RETRY);
+        counter++;
 
-    if(tcp_create_socket(&dest_addr, &sock, host, port) != ESP_OK)
-    {
-        ESP_LOGE(TAG_T, "Socket creation failed...");
-        return_f = FAIL;
-    }
-    else
-    {
-        while(counter < CONNECT_MAX_RETRY)
+        if(tcp_create_socket(&dest_addr, &sock, host, port) != ESP_OK)
         {
-            ESP_LOGI(TAG_T, "Connecting, attempt %d/%d", counter+1, CONNECT_MAX_RETRY);
-
+            ESP_LOGE(TAG_T, "Socket creation failed...");
+            shutdown(sock, 0);
+            close(sock);
+            return FAIL;
+        }
+        else
+        {
             if(tcp_connect_to_host(&dest_addr, &sock, &timeout, host, port) == ESP_FAIL)
-            {
                 ESP_LOGE(TAG_T, "Host connection failed...");
-                counter++;
-            }
             else
                 tcp_communicate_loop(&sock);
         }
-        return_f = MAX_RETRIES;
+        ESP_LOGE(TAG_T, "Closing socket...");
+        shutdown(sock, 0);
+        close(sock);
     }
+    return_f = MAX_RETRIES;
 
-    
-    ESP_LOGE(TAG_T, "Closing socket...");
-    shutdown(sock, 0);
-    close(sock);
 
     return return_f;
 }
@@ -145,6 +144,17 @@ void tcp_communicate_loop(int *sock_ptr)
                 error_counter++;
 
         //CHECK COMMANDS
+        rx_buffer[0] = '\0';
+
+        int len = recv(*sock_ptr, rx_buffer, sizeof(rx_buffer) - 1, 0);
+        if(len > 0) 
+        {
+            rx_buffer[len] = '\0';
+            ESP_LOGI(TAG_T, "RX: %s", rx_buffer);
+
+            if(strcmp(rx_buffer, "UABC:a1264598:W:L:1") == 0)
+                ESP_LOGW(TAG_T, "LED");
+        }
 
         vTaskDelay(pdMS_TO_TICKS(10));
     }
