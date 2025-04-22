@@ -155,43 +155,56 @@ void tcp_communicate_loop(int *sock_ptr)
     vSemaphoreDelete(keep_alive_semaphore);
 }
 
-void transmit_receive(char *tx_buffer, char *rx_buffer, int *sock_ptr)
+esp_err_t transmit_receive(char *tx_buffer, char *rx_buffer, int *sock_ptr)
 {
     send(*sock_ptr, tx_buffer, strlen(tx_buffer), 0);
     ESP_LOGI(TAG_T, "TX: %s", tx_buffer);
 
+    rx_buffer[0] = '\0';
+
     int len = recv(*sock_ptr, rx_buffer, sizeof(rx_buffer) - 1, 0);
     
-    if (len > 0) {
+    if(len > 0) 
+    {
         rx_buffer[len] = '\0';
         ESP_LOGI(TAG_T, "RX: %s", rx_buffer);
+        return ESP_OK;
+    }
+    else
+    {
+        ESP_LOGE(TAG_T, "Error occured in RX");
+        return ESP_FAIL;
     }
 }
 
 esp_err_t login(char *tx_buffer, char *rx_buffer, int *sock_ptr)
 {
     build_command(tx_buffer, "UABC", "a1264598", "L", "\0");
-    transmit_receive(tx_buffer, rx_buffer, sock_ptr);
-
-    if(check_ack(rx_buffer) == ESP_OK)
+    if(transmit_receive(tx_buffer, rx_buffer, sock_ptr) == ESP_OK)
     {
-        ESP_LOGI(TAG_T, "Login succesfull");
-        return ESP_OK;
+        if(check_ack(rx_buffer) == ESP_OK)
+        {
+            ESP_LOGI(TAG_T, "Login succesfull");
+            return ESP_OK;
+        }
+        else
+        {
+            ESP_LOGE(TAG_T, "Login failed...");
+            return ESP_FAIL;
+        }
     }
     else
-    {
-        ESP_LOGE(TAG_T, "Login failed...");
         return ESP_FAIL;
-    }
 }
 
 esp_err_t send_keep_alive(char *tx_buffer, char *rx_buffer, int *sock_ptr)
 {
     build_command(tx_buffer, "UABC", "a1264598", "K", "\0");
 
-    transmit_receive(tx_buffer, rx_buffer, sock_ptr);
-
-    return check_ack(rx_buffer);
+    if(transmit_receive(tx_buffer, rx_buffer, sock_ptr) == ESP_OK)
+        return check_ack(rx_buffer);
+    else
+        return ESP_FAIL;
 }
 
 void keep_alive_task(void *pvParameters)
@@ -266,7 +279,7 @@ esp_err_t check_internet_connection()
     }
     else if(tcp_connect_to_host(&dest_addr, &sock, &timeout, HOST_GOOGLE, PORT_GOOGLE) != ESP_OK)
     {
-        ESP_LOGE(TAG_T, "Failed to connect to google host. There is no internet connection.");
+        ESP_LOGE(TAG_T, "Failed to connect to google host. There is no internet connection...");
         return_v = ESP_FAIL;
     }
     else

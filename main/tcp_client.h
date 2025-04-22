@@ -56,7 +56,7 @@ esp_err_t tcp_connect_to_host(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, 
 
 void tcp_communicate_loop(int *sock_ptr);
 
-void transmit_receive(char *tx_buffer, char *rx_buffer, int *sock_ptr);
+esp_err_t transmit_receive(char *tx_buffer, char *rx_buffer, int *sock_ptr);
 
 esp_err_t login(char *tx_buffer, char *rx_buffer, int *sock_ptr);
 
