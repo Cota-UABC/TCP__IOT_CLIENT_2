@@ -18,13 +18,12 @@
 #define STR_LEN 128
 #define COMMANDS_MAX_QUANTITY 10
 
-#define CONNECT_MAX_RETRY 3
+#define CONNECT_MAX_RETRY 2
+#define MAX_ERROR_COUNT 3
 
 //server exit flags
 #define FAIL 0
-#define INTERNET_CONNECTED 1
-#define INTERNET_DISCONNECTED 2
-#define MAX_RETRY 3
+#define MAX_RETRIES 1
 
 #define FALSE 0
 #define TRUE 1
@@ -41,20 +40,19 @@ typedef struct
 {
     char host[STR_LEN];
     int port;
-    char local_host[STR_LEN]
+    char local_host[STR_LEN];
     int local_port;
-    SemaphoreHandle_t xSemaphore_internet;
 } task_tcp_params_t;
 
 void tcp_client_main(char *host, int port, char *local_host, int local_port);
 
 void tcp_task(void *pvParameters);
 
-uint8_t tcp_server_connect(uint8_t return_on_internet_connection, SemaphoreHandle_t xSemaphore_internet);
+uint8_t tcp_server_connect(char *host, int port);
 
-esp_err_t tcp_init_connect(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, char *host, int port);
+esp_err_t tcp_create_socket(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, char *host, int port);
 
-esp_err_t tcp_connect_to_host(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, struct timeval *timeout_ptr, char *host, int port)
+esp_err_t tcp_connect_to_host(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, struct timeval *timeout_ptr, char *host, int port);
 
 void tcp_communicate_loop(int *sock_ptr);
 
@@ -62,16 +60,14 @@ void transmit_receive(char *tx_buffer, char *rx_buffer, int *sock_ptr);
 
 esp_err_t login(char *tx_buffer, char *rx_buffer, int *sock_ptr);
 
-void send_keep_alive(char *tx_buffer, char *rx_buffer, int *sock_ptr);
+esp_err_t send_keep_alive(char *tx_buffer, char *rx_buffer, int *sock_ptr);
 
 void keep_alive_task(void *pvParameters);
 
-uint8_t check_ack(char *rx_buffer);
+esp_err_t check_ack(char *rx_buffer);
 
 void build_command(char *string_com, ...);
 
-void check_internet_task(void *pvParameter);
-
-uint8_t check_internet_mutex(SemaphoreHandle_t xSemaphore_internet, uint16_t ms_to_wait);
+esp_err_t check_internet_connection();
 
 #endif 

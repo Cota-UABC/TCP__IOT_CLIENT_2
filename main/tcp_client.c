@@ -5,45 +5,40 @@ static const char *TAG_T = "tcp_client";
 void tcp_client_main(char *host, int port, char *local_host, int local_port) 
 {
     task_tcp_params_t *tcp_params = malloc(sizeof(task_tcp_params_t));
-    SemaphoreHandle_t xSemaphore_internet = xSemaphoreCreateMutex();
 
     //tcp parameters
     strncpy(tcp_params->host, host, sizeof(tcp_params->host)); 
     tcp_params->port = port;
     strncpy(tcp_params->local_host, local_host, sizeof(tcp_params->local_host)); 
     tcp_params->local_port = local_port;
-    tcp_params->xSemaphore_internet = xSemaphore_internet;
 
     //create tcp task
     xTaskCreate(tcp_task, "tcp_task", 4096, (void *)tcp_params, 4, NULL);
 
-    //internet check task
-    xTaskCreate(check_internet_task, "check_internet_task", 4096, (void *)xSemaphore_internet, 4, NULL);
+    //DEPRECATED
+    //xTaskCreate(check_internet_task, "check_internet_task", 4096, (void *)xSemaphore_internet, 4, NULL);
 }
 
 void tcp_task(void *pvParameters)
 {
     task_tcp_params_t *params = (task_tcp_params_t *)pvParameters;
 
-    uint8_t return_f, counter = 0;
+    uint8_t return_f;
 
-    while(counter < MAX_RETRY)
+    while(1)
     {
-        counter++;
-
-        //iot server connection
-        ESP_LOGE(TAG_T, "Connecting to IOT server...");
-        return_f = tcp_server_connect(params->host, params->port, FALSE, params->xSemaphore_internet);
-        
-        //local server connection
-        if(return_f == INTERNET_DISCONNECTED)
+        if(check_internet_connection() == ESP_OK)
         {
-            ESP_LOGE(TAG_T, "Connecting to LOCAL server...");
-            return_f = tcp_server_connect(params->local_host, params->local_port, TRUE, params->xSemaphore_internet);
-            
-            if(return_f == FAIL) continue;
-            if(return_f == INTERNET_CONNECTED) continue;
-            if(return_f == MAX_RETRY) break;
+            ESP_LOGI(TAG_T, "Connecting to IOT server...");
+            return_f = tcp_server_connect(params->host, params->port);
+        } 
+        else
+        {
+            ESP_LOGI(TAG_T, "Connecting to LOCAL server...");
+            return_f = tcp_server_connect(params->local_host, params->local_port);
+
+            if(return_f == MAX_RETRIES)
+                break;
         }
     }
     
@@ -54,9 +49,9 @@ void tcp_task(void *pvParameters)
     vTaskDelete(NULL);
 }
 
-uint8_t tcp_server_connect(char *host, int port, uint8_t return_on_internet_connection, SemaphoreHandle_t xSemaphore_internet)
+uint8_t tcp_server_connect(char *host, int port)
 {
-    uint8_t return_f = FAIL, counter = 0, mutex_result;
+    uint8_t return_f = FAIL, counter = 0;
 
     struct sockaddr_in dest_addr;
     int sock;
@@ -77,39 +72,11 @@ uint8_t tcp_server_connect(char *host, int port, uint8_t return_on_internet_conn
             {
                 ESP_LOGE(TAG_T, "Host connection failed...");
                 counter++;
-
-                mutex_result = check_internet_mutex(xSemaphore_internet, 50);
-                
-                if(return_on_internet_connection == TRUE && mutex_result == TRUE)
-                {
-                    return_f = INTERNET_CONNECTED;
-                    break;
-                }
-                if(return_on_internet_connection == FALSE && mutex_result == FALSE)
-                {
-                    return_f = INTERNET_DISCONNECTED;
-                    break;
-                }
             }
             else
-            {
                 tcp_communicate_loop(&sock);
-
-                mutex_result = check_internet_mutex(xSemaphore_internet, 50);
-                
-                if(return_on_internet_connection == TRUE && mutex_result == TRUE)
-                {
-                    return_f = INTERNET_CONNECTED;
-                    break;
-                }
-                if(return_on_internet_connection == FALSE && mutex_result == FALSE)
-                {
-                    return_f = INTERNET_DISCONNECTED;
-                    break;
-                }
-            }
         }
-        return_f = MAX_RETRY;
+        return_f = MAX_RETRIES;
     }
 
     
@@ -171,15 +138,18 @@ void tcp_communicate_loop(int *sock_ptr)
 
     xTaskCreate(keep_alive_task, "keep_alive_task", 4096, (void *)keep_alive_semaphore, 4, &keep_alive_handle);
 
-    while(1)
+    while(error_counter < MAX_ERROR_COUNT)
     {
         if(xSemaphoreTake(keep_alive_semaphore, 20) == pdTRUE)
-            send_keep_alive(tx_buffer, rx_buffer, sock_ptr);
+            if(send_keep_alive(tx_buffer, rx_buffer, sock_ptr) == ESP_FAIL)
+                error_counter++;
 
         //CHECK COMMANDS
 
         vTaskDelay(pdMS_TO_TICKS(10));
     }
+    ESP_LOGE(TAG_T, "Max errors occured, exiting...");
+
 
     vTaskDelete(keep_alive_handle);
     vSemaphoreDelete(keep_alive_semaphore);
@@ -203,7 +173,7 @@ esp_err_t login(char *tx_buffer, char *rx_buffer, int *sock_ptr)
     build_command(tx_buffer, "UABC", "a1264598", "L", "\0");
     transmit_receive(tx_buffer, rx_buffer, sock_ptr);
 
-    if(check_ack(rx_buffer))
+    if(check_ack(rx_buffer) == ESP_OK)
     {
         ESP_LOGI(TAG_T, "Login succesfull");
         return ESP_OK;
@@ -215,20 +185,18 @@ esp_err_t login(char *tx_buffer, char *rx_buffer, int *sock_ptr)
     }
 }
 
-void send_keep_alive(char *tx_buffer, char *rx_buffer, int *sock_ptr)
+esp_err_t send_keep_alive(char *tx_buffer, char *rx_buffer, int *sock_ptr)
 {
     build_command(tx_buffer, "UABC", "a1264598", "K", "\0");
 
     transmit_receive(tx_buffer, rx_buffer, sock_ptr);
 
-    if(strcmp(rx_buffer, "ACK") =! 0)
-        ESP_LOGE(TAG_T, "Acknowledge not received...");
-
+    return check_ack(rx_buffer);
 }
 
 void keep_alive_task(void *pvParameters)
 {
-    SemaphoreHandle_t keep_alive_semaphore = (SemaphoreHandle_t)param;
+    SemaphoreHandle_t keep_alive_semaphore = (SemaphoreHandle_t)pvParameters;
 
     while(1)
     {
@@ -240,17 +208,17 @@ void keep_alive_task(void *pvParameters)
     vTaskDelete(NULL);
 }
 
-uint8_t check_ack(char *rx_buffer)
+esp_err_t check_ack(char *rx_buffer)
 {
-    if(strcmp(rx_buffer, "ACK") =! 0)
+    if(strcmp(rx_buffer, "ACK") != 0)
     {
         ESP_LOGE(TAG_T, "Acknowledge not received...");
-        return 0;
+        return ESP_FAIL;
     }
     else
     {
         ESP_LOGI(TAG_T, "Acknowledge received");
-        return 1;
+        return ESP_OK;
     }
 }
 
@@ -278,90 +246,53 @@ void build_command(char *string_com, ...)
 }
 
 //check connection to google
-void check_internet_task(void *pvParameter)
+esp_err_t check_internet_connection()
 {
-    SemaphoreHandle_t xSemaphore_internet = (SemaphoreHandle_t) pvParameter;
-
-    uint8_t internet_f = TRUE; 
+    uint8_t return_v;
     char tx_message[STR_LEN*2], rx_buffer[STR_LEN];
+    
+    struct sockaddr_in dest_addr;
+    int sock;
+    struct timeval timeout;
 
     strcpy(tx_message, "GET / HTTP/1.1\r\nHost: google.com\r\nConnection: close\r\n\r\n");
 
-    while(1)
+    ESP_LOGW(TAG_T, "Pinging Google...");
+
+    if(tcp_create_socket(&dest_addr, &sock, HOST_GOOGLE, PORT_GOOGLE) != ESP_OK)
     {
-        ESP_LOGW(TAG_T, "Pinging Google...");
-
-        struct sockaddr_in dest_addr;
-        int sock;
-        struct timeval timeout;
-
-        if(tcp_create_socket(&dest_addr, &sock, HOST_GOOGLE, PORT_GOOGLE) != ESP_OK)
-        {
-            ESP_LOGE(TAG_T, "Failed to initialize internet socket...");
-            continue;
-        }
-        else if(tcp_connect_to_host(&dest_addr, &sock, &timeout, HOST_GOOGLE, PORT_GOOGLE) != ESP_OK)
-        {
-            ESP_LOGE(TAG_T, "Failed to connect to google host...");
-            if(xSemaphoreTake(xSemaphore_internet, portMAX_DELAY) == pdTRUE)
-            {
-                internet_f = FALSE; 
-
-                xSemaphoreGive(xSemaphore_internet);
-            }
-            continue;
-        }
-
+        ESP_LOGE(TAG_T, "Failed to initialize internet socket...");
+        return_v = ESP_FAIL;
+    }
+    else if(tcp_connect_to_host(&dest_addr, &sock, &timeout, HOST_GOOGLE, PORT_GOOGLE) != ESP_OK)
+    {
+        ESP_LOGE(TAG_T, "Failed to connect to google host. There is no internet connection.");
+        return_v = ESP_FAIL;
+    }
+    else
+    {
         //send hhtp request
         send(sock, tx_message, strlen(tx_message), 0);  
         ESP_LOGI(TAG_T, "Message send to %s (%d bytes)", HOST_GOOGLE, strlen(tx_message));
 
         //receive text
-        int len = recv(sock, local_buffer, sizeof(local_buffer) - 1, 0);
+        int len = recv(sock, rx_buffer, sizeof(rx_buffer) - 1, 0);
         if(len < 0) 
         {
             ESP_LOGE(TAG_T, "Error occurred during receiving: errno %d", errno);
-            if(xSemaphoreTake(xSemaphore_internet, portMAX_DELAY) == pdTRUE)
-            {
-                internet_f = FALSE; 
-
-                xSemaphoreGive(xSemaphore_internet);
-            }
-            continue;
+            return_v = ESP_FAIL;
         }
 
         ESP_LOGI(TAG_T, "Received %d bytes", len);
         ESP_LOGI(TAG_T, "There is an internet connection.");
-        if(xSemaphoreTake(xSemaphore_internet, portMAX_DELAY) == pdTRUE)
-        {
-            internet_f = TRUE; 
-
-            xSemaphoreGive(xSemaphore_internet);
-        }
-
-        vTaskDelay(pdMS_TO_TICKS(INTERNET_CHECK_MS_WAIT));
+        return_v = ESP_OK;
     }
+     
     //close resources
-    vSemaphoreDelete(xSemaphore_internet);
 
-    ESP_LOGE(TAG_T, "Closing socket...");
+    ESP_LOGI(TAG_T, "Closing google socket...");
     shutdown(sock, 0);
     close(sock);
 
-    ESP_LOGE(TAG_T, "Closing internet task...");
-    vTaskDelete(NULL);
-}
-
-uint8_t check_internet_mutex(SemaphoreHandle_t xSemaphore_internet, uint16_t ms_to_wait)
-{
-    uint8_t return_f = UNDEFINED;
-
-    if(xSemaphoreTake(xSemaphore_internet, pdMS_TO_TICKS(ms_to_wait)) == pdTRUE)
-    {
-        return_f = internet_f;
-             
-        xSemaphoreGive(xSemaphore_internet);
-    }
-
-    return return_f;
+    return return_v;
 }

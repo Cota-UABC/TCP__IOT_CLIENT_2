@@ -37,7 +37,6 @@ void wifi_event_handler(void *event_handler_arg, esp_event_base_t event_base, in
             ESP_LOGE(TAG_W,"WiFi stopped.");
             connected_w = FAILED;
         }
-        connected_w = WATING_CONNEXION;
         break;
     case IP_EVENT_STA_GOT_IP:
         ESP_LOGI(TAG_W,"WiFi got IP");
