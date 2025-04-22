@@ -21,7 +21,7 @@ const char *TAG = "MAIN";
 
 void app_main(void)
 {
-    if(!wifi_connect(SSID, PASS))
+    if(wifi_connect(SSID, PASS) == ESP_FAIL)
     {
         ESP_LOGE(TAG_W, "Could not connect to wifi, restarting...");
         vTaskDelay(pdMS_TO_TICKS(5000));

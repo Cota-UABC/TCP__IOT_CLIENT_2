@@ -51,7 +51,7 @@ void wifi_event_handler(void *event_handler_arg, esp_event_base_t event_base, in
     }
 }
 
-uint8_t wifi_connect(char *ssid, char *password)
+esp_err_t wifi_connect(char *ssid, char *password)
 {
     ip_flag = 0;
     esp_err_t error = nvs_flash_init();
@@ -91,10 +91,10 @@ uint8_t wifi_connect(char *ssid, char *password)
         if(connected_w == FAILED)
         {
             ESP_LOGE(TAG_W, "Wifi conexion failed...");
-            return 0;
+            return ESP_FAIL;
         }
         vTaskDelay(pdMS_TO_TICKS(50));
     }
     
-    return 1;
+    return ESP_OK;
 }

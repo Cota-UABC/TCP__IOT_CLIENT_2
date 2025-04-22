@@ -46,7 +46,6 @@ void tcp_task(void *pvParameters)
             if(return_f == MAX_RETRY) break;
         }
     }
-
     
     //close resources
     free(params);
@@ -74,12 +73,12 @@ uint8_t tcp_server_connect(char *host, int port, uint8_t return_on_internet_conn
         {
             ESP_LOGI(TAG_T, "Connecting, attempt %d/%d", counter+1, CONNECT_MAX_RETRY);
 
-            if(tcp_connect_to_host(&dest_addr, &sock, &timeout, host, port) != ESP_OK)
+            if(tcp_connect_to_host(&dest_addr, &sock, &timeout, host, port) == ESP_FAIL)
             {
                 ESP_LOGE(TAG_T, "Host connection failed...");
                 counter++;
 
-                mutex_result; = check_internet_mutex(xSemaphore_internet, 50);
+                mutex_result = check_internet_mutex(xSemaphore_internet, 50);
                 
                 if(return_on_internet_connection == TRUE && mutex_result == TRUE)
                 {
@@ -96,7 +95,7 @@ uint8_t tcp_server_connect(char *host, int port, uint8_t return_on_internet_conn
             {
                 tcp_communicate_loop(&sock);
 
-                mutex_result; = check_internet_mutex(xSemaphore_internet, 50);
+                mutex_result = check_internet_mutex(xSemaphore_internet, 50);
                 
                 if(return_on_internet_connection == TRUE && mutex_result == TRUE)
                 {
@@ -148,10 +147,11 @@ esp_err_t tcp_connect_to_host(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, 
     timeout_ptr->tv_usec = 0;
     setsockopt(*sock_ptr, SOL_SOCKET, SO_RCVTIMEO, timeout_ptr, sizeof *timeout_ptr);
 
-    if (connect(*sock_ptr, (struct sockaddr *)dest_addr_ptr, sizeof(*dest_addr_ptr)) != 0) {
-    ESP_LOGE(TAG_T, "Socket unable to connect");
-    close(*sock_ptr);
-    return ESP_FAIL;
+    if (connect(*sock_ptr, (struct sockaddr *)dest_addr_ptr, sizeof(*dest_addr_ptr)) != 0) 
+    {
+        ESP_LOGE(TAG_T, "Socket unable to connect");
+        close(*sock_ptr);
+        return ESP_FAIL;
     }
     ESP_LOGI(TAG_T, "Successfully connected to %s:%d", host, port);
 
@@ -161,17 +161,28 @@ esp_err_t tcp_connect_to_host(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, 
 void tcp_communicate_loop(int *sock_ptr)
 {    
     char tx_buffer[STR_LEN], rx_buffer[STR_LEN];
+    uint8_t error_counter = 0;
 
-    //login
-    if(!login(tx_buffer, rx_buffer, sock_ptr))
+    TaskHandle_t keep_alive_handle = NULL;
+    SemaphoreHandle_t keep_alive_semaphore = xSemaphoreCreateBinary();
+
+    if(login(tx_buffer, rx_buffer, sock_ptr) == ESP_FAIL)
         return;
+
+    xTaskCreate(keep_alive_task, "keep_alive_task", 4096, (void *)keep_alive_semaphore, 4, &keep_alive_handle);
 
     while(1)
     {
-        keep_alive(tx_buffer, rx_buffer, sock_ptr);
+        if(xSemaphoreTake(keep_alive_semaphore, 20) == pdTRUE)
+            send_keep_alive(tx_buffer, rx_buffer, sock_ptr);
 
-        vTaskDelay(pdMS_TO_TICKS(10000));
+        //CHECK COMMANDS
+
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
+
+    vTaskDelete(keep_alive_handle);
+    vSemaphoreDelete(keep_alive_semaphore);
 }
 
 void transmit_receive(char *tx_buffer, char *rx_buffer, int *sock_ptr)
@@ -187,7 +198,7 @@ void transmit_receive(char *tx_buffer, char *rx_buffer, int *sock_ptr)
     }
 }
 
-uint8_t login(char *tx_buffer, char *rx_buffer, int *sock_ptr)
+esp_err_t login(char *tx_buffer, char *rx_buffer, int *sock_ptr)
 {
     build_command(tx_buffer, "UABC", "a1264598", "L", "\0");
     transmit_receive(tx_buffer, rx_buffer, sock_ptr);
@@ -195,16 +206,16 @@ uint8_t login(char *tx_buffer, char *rx_buffer, int *sock_ptr)
     if(check_ack(rx_buffer))
     {
         ESP_LOGI(TAG_T, "Login succesfull");
-        return 1;
+        return ESP_OK;
     }
     else
     {
         ESP_LOGE(TAG_T, "Login failed...");
-        return 0;
+        return ESP_FAIL;
     }
 }
 
-void keep_alive(char *tx_buffer, char *rx_buffer, int *sock_ptr)
+void send_keep_alive(char *tx_buffer, char *rx_buffer, int *sock_ptr)
 {
     build_command(tx_buffer, "UABC", "a1264598", "K", "\0");
 
@@ -213,6 +224,20 @@ void keep_alive(char *tx_buffer, char *rx_buffer, int *sock_ptr)
     if(strcmp(rx_buffer, "ACK") =! 0)
         ESP_LOGE(TAG_T, "Acknowledge not received...");
 
+}
+
+void keep_alive_task(void *pvParameters)
+{
+    SemaphoreHandle_t keep_alive_semaphore = (SemaphoreHandle_t)param;
+
+    while(1)
+    {
+        vTaskDelay(pdMS_TO_TICKS(KEEP_ALIVE_MS_WAIT));
+
+        xSemaphoreGive(keep_alive_semaphore);
+    }
+
+    vTaskDelete(NULL);
 }
 
 uint8_t check_ack(char *rx_buffer)

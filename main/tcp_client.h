@@ -6,6 +6,8 @@
 #include "esp_err.h"
 #include "esp_log.h"
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "freertos/semphr.h"
 
 #include <string.h>
@@ -24,14 +26,16 @@
 #define INTERNET_DISCONNECTED 2
 #define MAX_RETRY 3
 
+#define FALSE 0
+#define TRUE 1
+#define UNDEFINED 2
+
+
 #define HOST_GOOGLE "142.250.188.14" //Google
 #define PORT_GOOGLE 80
 
 #define INTERNET_CHECK_MS_WAIT 10000
-
-#define TRUE 1
-#define FALSE 0
-#define UNDEFINED 2
+#define KEEP_ALIVE_MS_WAIT 10000
 
 typedef struct 
 {
@@ -52,13 +56,15 @@ esp_err_t tcp_init_connect(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, cha
 
 esp_err_t tcp_connect_to_host(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, struct timeval *timeout_ptr, char *host, int port)
 
-esp_err_t tcp_communicate_loop(int *sock_ptr);
+void tcp_communicate_loop(int *sock_ptr);
 
 void transmit_receive(char *tx_buffer, char *rx_buffer, int *sock_ptr);
 
-uint8_t login(char *tx_buffer, char *rx_buffer, int *sock_ptr);
+esp_err_t login(char *tx_buffer, char *rx_buffer, int *sock_ptr);
 
-void keep_alive(char *tx_buffer, char *rx_buffer, int *sock_ptr);
+void send_keep_alive(char *tx_buffer, char *rx_buffer, int *sock_ptr);
+
+void keep_alive_task(void *pvParameters);
 
 uint8_t check_ack(char *rx_buffer);
 
