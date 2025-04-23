@@ -14,28 +14,25 @@ void tcp_client_main(char *host, int port, char *local_host, int local_port)
 
     //create tcp task
     xTaskCreate(tcp_task, "tcp_task", 4096, (void *)tcp_params, 4, NULL);
-
-    //DEPRECATED
-    //xTaskCreate(check_internet_task, "check_internet_task", 4096, (void *)xSemaphore_internet, 4, NULL);
 }
 
 void tcp_task(void *pvParameters)
 {
     task_tcp_params_t *params = (task_tcp_params_t *)pvParameters;
 
-    uint8_t return_f;
+    uint8_t return_f = 0;
 
     while(1)
     {
         if(check_internet_connection() == ESP_OK)
         {
             ESP_LOGI(TAG_T, "Connecting to IOT server...");
-            return_f = tcp_server_connect(params->host, params->port);
+            return_f = tcp_server_connect(params->host, params->port, FALSE);
         } 
-        else
+        if(return_f == MAX_RETRIES)
         {
             ESP_LOGI(TAG_T, "Connecting to LOCAL server...");
-            return_f = tcp_server_connect(params->local_host, params->local_port);
+            return_f = tcp_server_connect(params->local_host, params->local_port, TRUE);
 
             if(return_f == MAX_RETRIES)
                 break;
@@ -49,7 +46,7 @@ void tcp_task(void *pvParameters)
     vTaskDelete(NULL);
 }
 
-uint8_t tcp_server_connect(char *host, int port)
+uint8_t tcp_server_connect(char *host, int port, uint8_t check_internet)
 {
     uint8_t return_f = FAIL, counter = 0;
 
@@ -74,7 +71,7 @@ uint8_t tcp_server_connect(char *host, int port)
             if(tcp_connect_to_host(&dest_addr, &sock, &timeout, host, port) == ESP_FAIL)
                 ESP_LOGE(TAG_T, "Host connection failed...");
             else
-                tcp_communicate_loop(&sock);
+                tcp_communicate_loop(&sock, check_internet);
         }
         ESP_LOGE(TAG_T, "Closing socket...");
         shutdown(sock, 0);
@@ -124,7 +121,7 @@ esp_err_t tcp_connect_to_host(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, 
     return ESP_OK;
 }
 
-void tcp_communicate_loop(int *sock_ptr)
+void tcp_communicate_loop(int *sock_ptr, uint8_t check_internet)
 {    
     char tx_buffer[STR_LEN], rx_buffer[STR_LEN];
     uint8_t error_counter = 0;

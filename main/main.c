@@ -5,6 +5,8 @@
 
 #include "tcp_client.h"
 #include "wifi.h"
+#include "gpio.h"
+#include "adc.h"
 
 const char *TAG = "MAIN";
 
@@ -23,6 +25,8 @@ const char *TAG = "MAIN";
 
 void app_main(void)
 {
+    init_gpio();
+
     if(wifi_connect(SSID, PASS) == ESP_FAIL)
     {
         ESP_LOGE(TAG_W, "Could not connect to wifi, restarting...");
