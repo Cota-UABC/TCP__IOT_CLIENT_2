@@ -11,8 +11,10 @@
 const char *TAG = "MAIN";
 
 //wifi credentials
-#define SSID "Totalplay-2.4G-b518"
-#define PASS "Qxm2EAzh99Ce7Lfk"
+//#define SSID "Totalplay-2.4G-b518"
+//#define PASS "Qxm2EAzh99Ce7Lfk"
+#define SSID "COTA_PC"
+#define PASS "0402{V8z"
 //#define SSID "cota_mobil"
 //#define PASS "123456780"
 
@@ -20,7 +22,7 @@ const char *TAG = "MAIN";
 #define IOT_IP_ADDR "82.180.173.228" 
 #define IOT_PORT 8090
 
-#define LOCAL_IP_ADDR "192.168.100.13" 
+#define LOCAL_IP_ADDR "192.168.137.7" 
 #define LOCAL_PORT 8250
 
 void app_main(void)
@@ -31,7 +33,7 @@ void app_main(void)
     if(wifi_connect(SSID, PASS) == ESP_FAIL)
     {
         ESP_LOGE(TAG_W, "Could not connect to wifi, restarting...");
-        vTaskDelay(pdMS_TO_TICKS(5000));
+        vTaskDelay(pdMS_TO_TICKS(7000));
         esp_restart();
     }
 
