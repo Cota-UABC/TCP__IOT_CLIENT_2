@@ -2,7 +2,7 @@
 
 adc_oneshot_unit_handle_t adc1_handle;
 
-volatile uint16_t adc_value = 0;
+//volatile uint16_t adc_value = 0;
 
 void adc_init()
 {
@@ -23,11 +23,14 @@ void adc_init()
     ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, CHANNEL_0, &config)); 
 }
 
-void read_adc_input(adc_channel_t channel)
+float read_adc_input(adc_channel_t channel)
 {
     uint16_t adc_raw = 0;
+    float res = 0;
 
     ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, CHANNEL_0, &adc_raw));//returns n_bits number
 
-    adc_value = adc_raw; 
+    res = ((float)adc_raw / 4095.0) * VOLTAJE_REFERNCE;
+
+    return res; 
 }

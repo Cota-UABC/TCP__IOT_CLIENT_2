@@ -6,14 +6,16 @@
 
 #define CHANNEL_0 ADC_CHANNEL_0 //GPIO 4
 
+#define VOLTAJE_REFERNCE 3.3
+
 extern adc_oneshot_unit_handle_t adc1_handle;
 
-extern const float BETA;
+//extern const float BETA;
 
-extern volatile uint16_t adc_value;
+//extern volatile uint16_t adc_value;
 
 void adc_init();
 
-void read_adc_input(adc_channel_t channel);
+float read_adc_input(adc_channel_t channel);
 
 #endif 

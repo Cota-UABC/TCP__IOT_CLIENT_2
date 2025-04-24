@@ -128,8 +128,9 @@ esp_err_t tcp_connect_to_host(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, 
 
 uint8_t tcp_communicate_loop(int *sock_ptr, uint8_t check_internet)
 {    
-    char tx_buffer[STR_LEN], rx_buffer[STR_LEN];
+    char tx_buffer[STR_LEN], rx_buffer[STR_LEN], local_buffer[STR_LEN];
     uint8_t error_counter = 0, return_f = COMMUNICATION_FAIL;
+    float adc_value = 0;
 
     TaskHandle_t keep_alive_handle = NULL;
     SemaphoreHandle_t keep_alive_semaphore;
@@ -144,6 +145,7 @@ uint8_t tcp_communicate_loop(int *sock_ptr, uint8_t check_internet)
 
     //WIP
     char ack_msg[5] = "ACK";
+    char nack_msg[5] = "NACK";
     while(error_counter < MAX_ERROR_COUNT)
     {
         if(check_internet == TRUE)
@@ -168,18 +170,30 @@ uint8_t tcp_communicate_loop(int *sock_ptr, uint8_t check_internet)
             rx_buffer[len] = '\0';
             ESP_LOGI(TAG_T, "RX: %s", rx_buffer);
 
-            //wip
+            //WIP
             if(strcmp(rx_buffer, "UABC:a1264598:W:L:1") == 0)
             {
                 set_led(1);
                 send(*sock_ptr, ack_msg, strlen(ack_msg), 0);
                 ESP_LOGI(TAG_T, "TX: %s", ack_msg);
             }
-            if(strcmp(rx_buffer, "UABC:a1264598:W:L:0") == 0)
+            else if(strcmp(rx_buffer, "UABC:a1264598:W:L:0") == 0)
             {
                 set_led(0);
                 send(*sock_ptr, ack_msg, strlen(ack_msg), 0);
                 ESP_LOGI(TAG_T, "TX: %s", ack_msg);
+            }
+            else if(strcmp(rx_buffer, "UABC:a1264598:R:A") == 0)
+            {
+                adc_value = read_adc_input(CHANNEL_0);
+                sprintf(local_buffer, "%.2f", adc_value);
+                send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
+                ESP_LOGI(TAG_T, "TX: %s", local_buffer);
+            }
+            else
+            {
+                send(*sock_ptr, nack_msg, strlen(nack_msg), 0);
+                ESP_LOGE(TAG_T, "TX: %s", nack_msg);
             }
         }
 

@@ -26,6 +26,7 @@ const char *TAG = "MAIN";
 void app_main(void)
 {
     init_gpio();
+    adc_init();
 
     if(wifi_connect(SSID, PASS) == ESP_FAIL)
     {
