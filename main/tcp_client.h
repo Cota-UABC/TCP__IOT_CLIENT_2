@@ -24,12 +24,14 @@
 #define MAX_ERROR_COUNT 3
 
 //server exit flags
-#define FAIL 1
-#define MAX_RETRIES 2
+#define UNDEFINED 0
+#define SOCKET_FAIL 1
+#define HOST_CONNECT_FAIL 2
+#define COMMUNICATION_FAIL 3
+#define INTERNET_EXIT 4
 
-#define FALSE 0
 #define TRUE 1
-#define UNDEFINED 2
+#define FALSE 2
 
 
 #define HOST_GOOGLE "142.250.188.14" //Google
@@ -56,7 +58,7 @@ esp_err_t tcp_create_socket(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, ch
 
 esp_err_t tcp_connect_to_host(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, struct timeval *timeout_ptr, char *host, int port);
 
-void tcp_communicate_loop(int *sock_ptr, uint8_t check_internet);
+uint8_t tcp_communicate_loop(int *sock_ptr, uint8_t check_internet);
 
 esp_err_t transmit_receive(char *tx_buffer, char *rx_buffer, int *sock_ptr);
 
