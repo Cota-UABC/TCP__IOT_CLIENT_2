@@ -22,7 +22,9 @@ void tcp_task(void *pvParameters)
 
     uint8_t return_f = UNDEFINED, retry_counter = 0;
     esp_err_t esp_error;
-
+    
+    //WIP
+    /*
     while(1)
     {
         ESP_LOGI(TAG_T, "Connecting to IOT server, attempt %d/%d", retry_counter+1, CONNECT_MAX_RETRY);
@@ -46,7 +48,15 @@ void tcp_task(void *pvParameters)
             }
         }
     }
-    
+    */
+    int c = 3;
+    while(c)
+    {
+        ESP_LOGI(TAG_T, "Connecting to LOCAL server...");
+        return_f = tcp_server_connect(params->local_host, params->local_port, FALSE);
+        vTaskDelay(pdMS_TO_TICKS(3000));
+        c--;
+    }
     //close resources
     free(params);
 
@@ -132,6 +142,8 @@ uint8_t tcp_communicate_loop(int *sock_ptr, uint8_t check_internet)
 
     xTaskCreate(keep_alive_task, "keep_alive_task", 4096, (void *)keep_alive_semaphore, 4, &keep_alive_handle);
 
+    //WIP
+    char ack_msg[5] = "ACK";
     while(error_counter < MAX_ERROR_COUNT)
     {
         if(check_internet == TRUE)
@@ -156,8 +168,19 @@ uint8_t tcp_communicate_loop(int *sock_ptr, uint8_t check_internet)
             rx_buffer[len] = '\0';
             ESP_LOGI(TAG_T, "RX: %s", rx_buffer);
 
+            //wip
             if(strcmp(rx_buffer, "UABC:a1264598:W:L:1") == 0)
-                ESP_LOGW(TAG_T, "LED");
+            {
+                set_led(1);
+                send(*sock_ptr, ack_msg, strlen(ack_msg), 0);
+                ESP_LOGI(TAG_T, "TX: %s", ack_msg);
+            }
+            if(strcmp(rx_buffer, "UABC:a1264598:W:L:0") == 0)
+            {
+                set_led(0);
+                send(*sock_ptr, ack_msg, strlen(ack_msg), 0);
+                ESP_LOGI(TAG_T, "TX: %s", ack_msg);
+            }
         }
 
         vTaskDelay(pdMS_TO_TICKS(10));
