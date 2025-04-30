@@ -1,0 +1,187 @@
+I (132789) tcp_client: TX: UABC:a1264598:K
+I (132839) tcp_client: RX: ACK
+I (132839) tcp_client: Acknowledge received
+I (142719) tcp_client: TX: UABC:a1264598:K
+I (142779) tcp_client: RX: ACK
+I (142789) tcp_client: Acknowledge received
+W (148109) tcp_client: Connecting to host: 82.180.173.228:8090...I (152619) tcp_client: TX: UABC:a1264598:K
+I (152629) tcp_client: RX: ACK
+I (152629) tcp_client: Acknowledge received
+I (162509) tcp_client: TX: UABC:a1264598:K
+I (162729) tcp_client: RX: ACK
+I (162729) tcp_client: Acknowledge received
+E (166609) tcp_remote_s: Could not connect to server...
+W (171609) tcp_client: Connecting to host: 142.250.188.14:80...
+I (172619) tcp_client: TX: UABC:a1264598:K
+I (172629) tcp_client: RX: ACK
+I (172639) tcp_client: Acknowledge received
+I (180549) tcp_client: RX: UABC:a1
+E (180549) tcp_client: TX: NACK
+I (183139) tcp_client: TX: UABC:a1264598:K
+I (183149) tcp_client: RX: ACK
+I (183149) tcp_client: Acknowledge received
+W (190109) tcp_client: Connecting to host: 82.180.173.228:8090...I (192979) tcp_client: TX: UABC:a1264598:K
+I (192989) tcp_client: RX: ACK
+I (192989) tcp_client: Acknowledge received
+I (202869) tcp_client: TX: UABC:a1264598:K
+I (202879) tcp_client: RX: ACK
+I (202879) tcp_client: Acknowledge received
+E (208609) tcp_remote_s: Could not connect to server...
+I (212759) tcp_client: TX: UABC:a1264598:K
+I (212819) tcp_client: RX: ACK
+I (212819) tcp_client: Acknowledge received
+W (213609) tcp_client: Connecting to host: 142.250.188.14:80...
+I (222699) tcp_client: TX: UABC:a1264598:K
+I (222739) tcp_client: RX: ACK
+I (222749) tcp_client: Acknowledge received
+W (232109) tcp_client: Connecting to host: 82.180.173.228:8090...I (232579) tcp_client: TX: UABC:a1264598:K
+I (232579) tcp_client: RX: ACK
+I (232589) tcp_client: Acknowledge received
+I (242469) tcp_client: TX: UABC:a1264598:K
+I (242519) tcp_client: RX: ACK
+I (242519) tcp_client: Acknowledge received
+E (250609) tcp_remote_s: Could not connect to server...
+I (252399) tcp_client: TX: UABC:a1264598:K
+I (252439) tcp_client: RX: ACK
+I (252439) tcp_client: Acknowledge received
+W (255609) tcp_client: Connecting to host: 142.250.188.14:80...
+I (262339) tcp_client: TX: UABC:a1264598:K
+I (262379) tcp_client: RX: ACK
+I (262379) tcp_client: Acknowledge received
+I (272339) tcp_client: TX: UABC:a1264598:K
+I (272349) tcp_client: RX: ACK
+I (272349) tcp_client: Acknowledge received
+W (274109) tcp_client: Connecting to host: 82.180.173.228:8090...I (282339) tcp_client: TX: UABC:a1264598:K
+I (282439) tcp_client: RX: ACK
+I (282439) tcp_client: Acknowledge received
+I (292339) tcp_client: TX: UABC:a1264598:K
+I (292379) tcp_client: RX: ACK
+I (292379) tcp_client: Acknowledge received
+E (292609) tcp_remote_s: Could not connect to server...
+W (297609) tcp_client: Connecting to host: 142.250.188.14:80...
+I (302339) tcp_client: TX: UABC:a1264598:K
+I (302349) tcp_client: RX: ACK
+I (302349) tcp_client: Acknowledge received
+I (312339) tcp_client: TX: UABC:a1264598:K
+I (312449) tcp_client: RX: ACK
+I (312449) tcp_client: Acknowledge received
+W (316109) tcp_client: Connecting to host: 82.180.173.228:8090...I (322339) tcp_client: TX: UABC:a1264598:K
+I (322479) tcp_client: RX: ACK
+I (322479) tcp_client: Acknowledge received
+I (332359) tcp_client: TX: UABC:a1264598:K
+I (332509) tcp_client: RX: ACK
+I (332519) tcp_client: Acknowledge received
+E (334609) tcp_remote_s: Could not connect to server...
+W (339609) tcp_client: Connecting to host: 142.250.188.14:80...
+I (342399) tcp_client: TX: UABC:a1264598:K
+I (342589) tcp_client: RX: ACK
+I (342589) tcp_client: Acknowledge received
+I (352469) tcp_client: TX: UABC:a1264598:K
+I (352579) tcp_client: RX: UAB
+E (352579) tcp_client: Acknowledge not received...
+I (352579) tcp_client: RX: C:a1264598:W:L:1:LedOff
+
+E (352589) tcp_client: TX: NACK
+W (358109) tcp_client: Connecting to host: 82.180.173.228:8090...I (362339) tcp_client: TX: UABC:a1264598:K
+E (362339) tcp_client: Error occured in RX
+I (372339) tcp_client: TX: UABC:a1264598:K
+E (372339) tcp_client: Error occured in RX
+E (372349) tcp_client: Max errors occured, exiting...
+E (372349) tcp_client: Closing client...
+W (372399) tcp_client: Connecting to host: 192.168.0.187:8250...
+I (372559) tcp_client: Successfully connected to 192.168.0.187:8250
+I (372559) tcp_client: TX: UABC:a1264598:L
+I (372689) tcp_client: RX: ACK
+I (372689) tcp_client: Acknowledge received
+I (372689) tcp_client: Login succesfull
+E (376609) tcp_remote_s: Could not connect to server...
+I (379429) tcp_client: RX: UABC:a1264598:W:L:1:LedOff
+
+I (379439) tcp_client: TX: ACK:1
+W (381609) tcp_client: Connecting to host: 142.250.188.14:80...
+I (381699) tcp_client: RX: UABC:a1264598:W:L:1:LedOff
+
+I (381699) tcp_client: TX: ACK:1
+I (383019) tcp_client: TX: UABC:a1264598:K
+I (383039) tcp_client: RX: ACK
+I (383039) tcp_client: Acknowledge received
+I (392919) tcp_client: TX: UABC:a1264598:K
+I (392939) tcp_client: RX: ACK
+I (392939) tcp_client: Acknowledge received
+I (397469) tcp_client: RX: UABC:a1264598:W:L:0:LedOff
+
+I (397479) tcp_client: TX: ACK:0
+W (400109) tcp_client: Connecting to host: 82.180.173.228:8090...I (402689) tcp_client: TX: UABC:a1264598:K
+I (402699) tcp_client: RX: ACK
+I (402699) tcp_client: Acknowledge received
+I (412689) tcp_client: TX: UABC:a1264598:K
+I (412799) tcp_client: RX: ACK
+I (412799) tcp_client: Acknowledge received
+I (414059) tcp_client: RX: UABC:a1264598:W:L:1:LedOff
+
+I (414059) tcp_client: TX: ACK:1
+E (418609) tcp_remote_s: Could not connect to server...
+I (420789) tcp_client: RX: UABC:a1264598:W:L:0:LedOff
+
+I (420789) tcp_client: TX: ACK:0
+I (423369) tcp_client: TX: UABC:a1264598:K
+I (423379) tcp_client: RX: ACK
+I (423379) tcp_client: Acknowledge received
+W (423609) tcp_client: Connecting to host: 142.250.188.14:80...
+I (433259) tcp_client: TX: UABC:a1264598:K
+I (433279) tcp_client: RX: ACK
+I (433279) tcp_client: Acknowledge received
+W (442109) tcp_client: Connecting to host: 82.180.173.228:8090...I (443109) tcp_client: TX: UABC:a1264598:K
+I (443119) tcp_client: RX: ACK
+I (443119) tcp_client: Acknowledge received
+I (452999) tcp_client: TX: UABC:a1264598:K
+I (453039) tcp_client: RX: ACK
+I (453039) tcp_client: Acknowledge received
+E (460609) tcp_remote_s: Could not connect to server...
+I (462919) tcp_client: TX: UABC:a1264598:K
+I (463079) tcp_client: RX: ACK
+I (463079) tcp_client: Acknowledge received
+W (465609) tcp_client: Connecting to host: 142.250.188.14:80...
+I (472959) tcp_client: TX: UABC:a1264598:K
+I (473109) tcp_client: RX: ACK
+I (473109) tcp_client: Acknowledge received
+I (482989) tcp_client: TX: UABC:a1264598:K
+I (482999) tcp_client: RX: ACK
+I (482999) tcp_client: Acknowledge received
+W (484109) tcp_client: Connecting to host: 82.180.173.228:8090...I (492829) tcp_client: TX: UABC:a1264598:K
+I (492879) tcp_client: RX: ACK
+I (492879) tcp_client: Acknowledge received
+E (502609) tcp_remote_s: Could not connect to server...
+I (502759) tcp_client: TX: UABC:a1264598:K
+I (502909) tcp_client: RX: ACK
+I (502909) tcp_client: Acknowledge received
+W (507609) tcp_client: Connecting to host: 142.250.188.14:80...
+I (512789) tcp_client: TX: UABC:a1264598:K
+I (512949) tcp_client: RX: ACK
+I (512949) tcp_client: Acknowledge received
+I (522829) tcp_client: TX: UABC:a1264598:K
+I (522879) tcp_client: RX: ACK
+I (522879) tcp_client: Acknowledge received
+W (526109) tcp_client: Connecting to host: 82.180.173.228:8090...I (532709) tcp_client: TX: UABC:a1264598:K
+I (532749) tcp_client: RX: ACK
+I (532749) tcp_client: Acknowledge received
+I (542689) tcp_client: TX: UABC:a1264598:K
+I (542699) tcp_client: RX: ACK
+I (542699) tcp_client: Acknowledge received
+E (544609) tcp_remote_s: Could not connect to server...
+W (549609) tcp_client: Connecting to host: 142.250.188.14:80...
+I (552689) tcp_client: TX: UABC:a1264598:K
+I (552799) tcp_client: RX: ACK
+I (552799) tcp_client: Acknowledge received
+I (562689) tcp_client: TX: UABC:a1264598:K
+I (562709) tcp_client: RX: ACK
+I (562709) tcp_client: Acknowledge received
+W (568109) tcp_client: Connecting to host: 82.180.173.228:8090...I (572689) tcp_client: TX: UABC:a1264598:K
+I (572849) tcp_client: RX: ACK
+I (572849) tcp_client: Acknowledge received
+I (582729) tcp_client: TX: UABC:a1264598:K
+I (582889) tcp_client: RX: ACK
+I (582889) tcp_client: Acknowledge received
+E (586609) tcp_remote_s: Could not connect to server...
+W (591609) tcp_client: Connecting to host: 142.250.188.14:80...
+I (592769) tcp_client: TX: UABC:a1264598:K

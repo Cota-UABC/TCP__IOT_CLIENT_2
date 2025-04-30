@@ -21,7 +21,7 @@
 #define STR_LEN 128
 #define COMMANDS_MAX_QUANTITY 10
 
-#define CONNECT_MAX_RETRY 2
+//#define CONNECT_MAX_RETRY 2
 #define MAX_ERROR_COUNT 3
 
 //server exit flags
@@ -38,8 +38,11 @@
 #define HOST_GOOGLE "142.250.188.14" //Google
 #define PORT_GOOGLE 80
 
-#define INTERNET_CHECK_MS_WAIT 10000
+#define REMOTE_MS_WAIT 5000
 #define KEEP_ALIVE_MS_WAIT 10000
+
+#define CONNECT 1
+#define DISCONNECT 0
 
 typedef struct 
 {
@@ -47,19 +50,22 @@ typedef struct
     int port;
     char local_host[STR_LEN];
     int local_port;
+    QueueHandle_t queue_local_s_handler;
 } task_tcp_params_t;
 
 void tcp_client_main(char *host, int port, char *local_host, int local_port);
 
-void tcp_task(void *pvParameters);
+void remote_server_task(void *pvParameters);
 
-uint8_t tcp_server_connect(char *host, int port, uint8_t check_internet);
+void local_server_task(void *pvParameters);
+
+//uint8_t tcp_server_connect(char *host, int port);
 
 esp_err_t tcp_create_socket(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, char *host, int port);
 
 esp_err_t tcp_connect_to_host(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, struct timeval *timeout_ptr, char *host, int port);
 
-uint8_t tcp_communicate_loop(int *sock_ptr, uint8_t check_internet);
+uint8_t tcp_communicate_loop(int *sock_ptr, QueueHandle_t queue_local_s_handler);
 
 esp_err_t transmit_receive(char *tx_buffer, char *rx_buffer, int *sock_ptr);
 

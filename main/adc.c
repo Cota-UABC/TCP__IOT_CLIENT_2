@@ -30,7 +30,7 @@ float read_adc_input(adc_channel_t channel)
 
     ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, CHANNEL_0, &adc_raw));//returns n_bits number
 
-    res = ((float)adc_raw / 4095.0) * VOLTAJE_REFERNCE;
+    res = ((float)adc_raw / 4095.0) * VOLTAGE_REFERNCE;
 
     return res; 
 }

@@ -1,6 +1,8 @@
 #include "tcp_client.h"
 
 static const char *TAG_T = "tcp_client";
+static const char *TAG_T_REMOTE = "tcp_remote_s";
+static const char *TAG_T_LOCAL = "tcp_local_s";
 
 void tcp_client_main(char *host, int port, char *local_host, int local_port) 
 {
@@ -11,60 +13,140 @@ void tcp_client_main(char *host, int port, char *local_host, int local_port)
     tcp_params->port = port;
     strncpy(tcp_params->local_host, local_host, sizeof(tcp_params->local_host)); 
     tcp_params->local_port = local_port;
+    tcp_params->queue_local_s_handler = xQueueCreate(10, sizeof(int));
 
     //create tcp task
-    xTaskCreate(tcp_task, "tcp_task", 4096, (void *)tcp_params, 4, NULL);
+    xTaskCreate(remote_server_task, "remote_server_task", 4096, (void *)tcp_params, 4, NULL);
+
+    vTaskDelay(pdMS_TO_TICKS(1000));
+
+    xTaskCreate(local_server_task, "local_server_task", 4096, (void *)tcp_params, 4, NULL);
+
+    while(1)
+    vTaskDelay(pdMS_TO_TICKS(10));
 }
 
-void tcp_task(void *pvParameters)
+void remote_server_task(void *pvParameters)
 {
     task_tcp_params_t *params = (task_tcp_params_t *)pvParameters;
 
-    uint8_t return_f = UNDEFINED, retry_counter = 0;
-    esp_err_t esp_error;
-    
-    //WIP
+    struct sockaddr_in dest_addr;
+    int sock;
+    struct timeval timeout;
+
+    uint8_t return_f = UNDEFINED;
+    int value;
+
+    value = CONNECT;
+        if(!xQueueSend(params->queue_local_s_handler, &value, pdMS_TO_TICKS(500)))
+            ESP_LOGE(TAG_T_REMOTE, "Error sending queue");
+
+    while(1)
+    vTaskDelay(pdMS_TO_TICKS(REMOTE_MS_WAIT));
+   
     /*
     while(1)
     {
-        ESP_LOGI(TAG_T, "Connecting to IOT server, attempt %d/%d", retry_counter+1, CONNECT_MAX_RETRY);
-        return_f = tcp_server_connect(params->host, params->port, FALSE);
+        value = CONNECT;
+        if(!xQueueSend(params->queue_local_s_handler, &value, pdMS_TO_TICKS(500)))
+            ESP_LOGE(TAG_T_REMOTE, "Error sending queue");
 
-        if(return_f == HOST_CONNECT_FAIL || return_f == COMMUNICATION_FAIL)
+        while(check_internet_connection() == ESP_FAIL)
         {
-            esp_error = check_internet_connection();
-            if(esp_error == ESP_OK)
-            {
-                retry_counter++;
-                continue;
-            }
-            if(esp_error == ESP_FAIL || retry_counter >= CONNECT_MAX_RETRY)
-            {
-                ESP_LOGI(TAG_T, "Connecting to LOCAL server...");
-                return_f = tcp_server_connect(params->local_host, params->local_port, TRUE);
-
-                if(return_f == HOST_CONNECT_FAIL )
-
-            }
+            ESP_LOGE(TAG_T_REMOTE, "No internet detected...");
+            vTaskDelay(pdMS_TO_TICKS(REMOTE_MS_WAIT));   
         }
-    }
-    */
-    int c = 3;
-    while(c)
-    {
-        ESP_LOGI(TAG_T, "Connecting to LOCAL server...");
-        return_f = tcp_server_connect(params->local_host, params->local_port, FALSE);
-        vTaskDelay(pdMS_TO_TICKS(3000));
-        c--;
-    }
+        ESP_LOGI(TAG_T_REMOTE, "Internet detected");
+
+        //return_f = tcp_server_connect(params->host, params->port);
+
+        if(tcp_create_socket(&dest_addr, &sock, params->host, params->port) == ESP_FAIL)
+        {
+            vTaskDelay(pdMS_TO_TICKS(REMOTE_MS_WAIT));
+            continue;
+        }
+        else if(tcp_connect_to_host(&dest_addr, &sock, &timeout, params->host, params->port) == ESP_FAIL)
+        {
+            ESP_LOGE(TAG_T_REMOTE, "Could not connect to server...");
+            vTaskDelay(pdMS_TO_TICKS(REMOTE_MS_WAIT));
+            continue;
+        }
+
+        value = DISCONNECT;
+        if(!xQueueSend(params->queue_local_s_handler, &value, portMAX_DELAY))
+            ESP_LOGE(TAG_T_REMOTE, "Error sending queue");
+
+        vTaskDelay(pdMS_TO_TICKS(500));
+
+        return_f = tcp_communicate_loop(&sock, NULL);
+        ESP_LOGE(TAG_T_REMOTE, "Disconnected...");
+        vTaskDelay(pdMS_TO_TICKS(REMOTE_MS_WAIT));
+
+    }*/
+
+
     //close resources
     free(params);
 
-    ESP_LOGE(TAG_T, "Closing tcp task...");
+    ESP_LOGE(TAG_T_REMOTE, "Closing socket...");
+    shutdown(sock, 0);
+    close(sock);
+
+    ESP_LOGE(TAG_T_REMOTE, "Closing remote task...");
     vTaskDelete(NULL);
 }
 
-uint8_t tcp_server_connect(char *host, int port, uint8_t check_internet)
+void local_server_task(void *pvParameters)
+{
+    task_tcp_params_t *params = (task_tcp_params_t *)pvParameters;
+
+    struct sockaddr_in dest_addr;
+    int sock;
+    struct timeval timeout;
+
+    int queue_res;
+    uint8_t return_f = UNDEFINED;
+    
+    while(1)
+    {
+        xQueueReceive(params->queue_local_s_handler, &queue_res, portMAX_DELAY);
+        
+        if(queue_res == CONNECT)
+        {
+            while(1)
+            {
+                if(xQueueReceive(params->queue_local_s_handler, &queue_res, pdMS_TO_TICKS(50)))
+                    if(queue_res == DISCONNECT)
+                        continue;
+
+                if(tcp_create_socket(&dest_addr, &sock, params->local_host, params->local_port) == ESP_FAIL)
+                    continue;
+                else if(tcp_connect_to_host(&dest_addr, &sock, &timeout, params->local_host, params->local_port) == ESP_FAIL)
+                {
+                    ESP_LOGE(TAG_T_LOCAL, "Could not connect to server...");
+                    vTaskDelay(pdMS_TO_TICKS(2000));
+                    continue;
+                }
+                else
+                    return_f = tcp_communicate_loop(&sock, params->queue_local_s_handler);
+            }
+        }
+        
+    }
+
+    //close resources
+    free(params);
+
+    ESP_LOGE(TAG_T_LOCAL, "Closing socket...");
+    shutdown(sock, 0);
+    close(sock);
+
+    ESP_LOGE(TAG_T_LOCAL, "Closing remote task...");
+    vTaskDelete(NULL);
+}
+
+/*DEPRECATED
+uint8_t tcp_server_connect(char *host, int port)
 {
     uint8_t return_f = UNDEFINED, counter = 0;
 
@@ -78,7 +160,7 @@ uint8_t tcp_server_connect(char *host, int port, uint8_t check_internet)
     else if(tcp_connect_to_host(&dest_addr, &sock, &timeout, host, port) == ESP_FAIL)
         return_f = HOST_CONNECT_FAIL;
     else
-        return_f = tcp_communicate_loop(&sock, check_internet);
+        return_f = tcp_communicate_loop(&sock);
     
 
     ESP_LOGE(TAG_T, "Closing socket...");
@@ -87,10 +169,11 @@ uint8_t tcp_server_connect(char *host, int port, uint8_t check_internet)
 
     return return_f;
 }
+*/
 
 esp_err_t tcp_create_socket(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, char *host, int port)
 {
-    ESP_LOGW(TAG_T, "Creating socket...");
+    //ESP_LOGW(TAG_T, "Creating socket...");
 
     dest_addr_ptr->sin_addr.s_addr = inet_addr(host);
     dest_addr_ptr->sin_family = AF_INET;
@@ -98,10 +181,10 @@ esp_err_t tcp_create_socket(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, ch
 
     *sock_ptr = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
     if (*sock_ptr < 0) {
-        ESP_LOGE(TAG_T, "Unable to create socket");
+        //ESP_LOGE(TAG_T, "Unable to create socket");
         return ESP_FAIL;
     }
-    ESP_LOGI(TAG_T, "Socket created successfully");
+    //ESP_LOGI(TAG_T, "Socket created successfully");
 
     return ESP_OK;
 }
@@ -117,7 +200,7 @@ esp_err_t tcp_connect_to_host(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, 
 
     if (connect(*sock_ptr, (struct sockaddr *)dest_addr_ptr, sizeof(*dest_addr_ptr)) != 0) 
     {
-        ESP_LOGE(TAG_T, "Socket unable to connect to host");
+        //ESP_LOGE(TAG_T, "Socket unable to connect to host");
         close(*sock_ptr);
         return ESP_FAIL;
     }
@@ -126,11 +209,12 @@ esp_err_t tcp_connect_to_host(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, 
     return ESP_OK;
 }
 
-uint8_t tcp_communicate_loop(int *sock_ptr, uint8_t check_internet)
+uint8_t tcp_communicate_loop(int *sock_ptr, QueueHandle_t queue_local_s_handler)
 {    
     char tx_buffer[STR_LEN], rx_buffer[STR_LEN], local_buffer[STR_LEN];
     uint8_t error_counter = 0, return_f = COMMUNICATION_FAIL;
     float adc_value = 0;
+    int queue_res;
 
     TaskHandle_t keep_alive_handle = NULL;
     SemaphoreHandle_t keep_alive_semaphore;
@@ -148,13 +232,15 @@ uint8_t tcp_communicate_loop(int *sock_ptr, uint8_t check_internet)
     char nack_msg[5] = "NACK";
     while(error_counter < MAX_ERROR_COUNT)
     {
-        if(check_internet == TRUE)
-            if(check_internet_connection() == ESP_OK)
+        if(queue_local_s_handler != NULL)
+        {
+            queue_res = -1;
+            xQueueReceive(queue_local_s_handler, &queue_res, pdMS_TO_TICKS(50));
+            if(queue_res == DISCONNECT)
             {
-                ESP_LOGW(TAG_T, "Reconnected to internet, exiting connection...");
-                return_f = INTERNET_EXIT;
                 break;
             }
+        }
 
         //send keep alive
         if(xSemaphoreTake(keep_alive_semaphore, 20) == pdTRUE)
@@ -170,23 +256,25 @@ uint8_t tcp_communicate_loop(int *sock_ptr, uint8_t check_internet)
             rx_buffer[len] = '\0';
             ESP_LOGI(TAG_T, "RX: %s", rx_buffer);
 
-            //WIP
-            if(strcmp(rx_buffer, "UABC:a1264598:W:L:1") == 0)
+            //unfinished rx check
+            if(strncmp(rx_buffer, "UABC:a1264598:W:L:1", 19) == 0)
             {
                 set_led(1);
-                send(*sock_ptr, ack_msg, strlen(ack_msg), 0);
-                ESP_LOGI(TAG_T, "TX: %s", ack_msg);
+                sprintf(local_buffer, "%s:1", ack_msg);
+                send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
+                ESP_LOGI(TAG_T, "TX: %s", local_buffer);
             }
-            else if(strcmp(rx_buffer, "UABC:a1264598:W:L:0") == 0)
+            else if(strncmp(rx_buffer, "UABC:a1264598:W:L:0", 19) == 0)
             {
                 set_led(0);
-                send(*sock_ptr, ack_msg, strlen(ack_msg), 0);
-                ESP_LOGI(TAG_T, "TX: %s", ack_msg);
+                sprintf(local_buffer, "%s:0", ack_msg);
+                send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
+                ESP_LOGI(TAG_T, "TX: %s", local_buffer);
             }
-            else if(strcmp(rx_buffer, "UABC:a1264598:R:A") == 0)
+            else if(strncmp(rx_buffer, "UABC:a1264598:R:A", 17) == 0)
             {
                 adc_value = read_adc_input(CHANNEL_0);
-                sprintf(local_buffer, "%.2f", adc_value);
+                sprintf(local_buffer, "%s:%.2f", ack_msg, adc_value);
                 send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
                 ESP_LOGI(TAG_T, "TX: %s", local_buffer);
             }
@@ -206,10 +294,11 @@ uint8_t tcp_communicate_loop(int *sock_ptr, uint8_t check_internet)
         return_f = COMMUNICATION_FAIL;
     }
 
-
+    
+    ESP_LOGE(TAG_T, "Closing client...");
     vTaskDelete(keep_alive_handle);
     vSemaphoreDelete(keep_alive_semaphore);
-
+    
     return return_f;
 }
 
@@ -328,7 +417,7 @@ esp_err_t check_internet_connection()
 
     strcpy(tx_message, "GET / HTTP/1.1\r\nHost: google.com\r\nConnection: close\r\n\r\n");
 
-    ESP_LOGW(TAG_T, "Pinging Google...");
+    //ESP_LOGW(TAG_T, "Pinging Google...");
 
     if(tcp_create_socket(&dest_addr, &sock, HOST_GOOGLE, PORT_GOOGLE) != ESP_OK)
     {
@@ -337,31 +426,31 @@ esp_err_t check_internet_connection()
     }
     else if(tcp_connect_to_host(&dest_addr, &sock, &timeout, HOST_GOOGLE, PORT_GOOGLE) != ESP_OK)
     {
-        ESP_LOGE(TAG_T, "Failed to connect to google host. There is no internet connection...");
+        //ESP_LOGE(TAG_T, "Failed to connect to google host. There is no internet connection...");
         return_v = ESP_FAIL;
     }
     else
     {
         //send hhtp request
         send(sock, tx_message, strlen(tx_message), 0);  
-        ESP_LOGI(TAG_T, "Message send to %s (%d bytes)", HOST_GOOGLE, strlen(tx_message));
+        //ESP_LOGI(TAG_T, "Message send to %s (%d bytes)", HOST_GOOGLE, strlen(tx_message));
 
         //receive text
         int len = recv(sock, rx_buffer, sizeof(rx_buffer) - 1, 0);
         if(len < 0) 
         {
-            ESP_LOGE(TAG_T, "Error occurred during receiving: errno %d", errno);
+            //ESP_LOGE(TAG_T, "Error occurred during receiving: errno %d", errno);
             return_v = ESP_FAIL;
         }
 
-        ESP_LOGI(TAG_T, "Received %d bytes", len);
-        ESP_LOGI(TAG_T, "There is an internet connection.");
+        //ESP_LOGI(TAG_T, "Received %d bytes", len);
+        //ESP_LOGI(TAG_T, "There is an internet connection.");
         return_v = ESP_OK;
     }
      
     //close resources
 
-    ESP_LOGI(TAG_T, "Closing google socket...");
+    //ESP_LOGI(TAG_T, "Closing google socket...");
     shutdown(sock, 0);
     close(sock);
 
