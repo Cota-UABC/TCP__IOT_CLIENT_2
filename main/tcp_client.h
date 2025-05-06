@@ -22,27 +22,22 @@
 #define COMMANDS_MAX_QUANTITY 10
 
 //#define CONNECT_MAX_RETRY 2
-#define MAX_ERROR_COUNT 3
+#define MAX_ERROR_COUNT 2
 
 //server exit flags
 #define UNDEFINED 0
-#define SOCKET_FAIL 1
-#define HOST_CONNECT_FAIL 2
-#define COMMUNICATION_FAIL 3
-#define INTERNET_EXIT 4
+#define COMMUNICATION_FAIL 1
+#define STOP_SEMAPHORE 2
 
 #define TRUE 1
 #define FALSE 2
 
-
 #define HOST_GOOGLE "142.250.188.14" //Google
 #define PORT_GOOGLE 80
 
-#define REMOTE_MS_WAIT 5000
+#define REMOTE_MS_WAIT 4000
+#define SEMAPHORE_MS_WAIT 20
 #define KEEP_ALIVE_MS_WAIT 10000
-
-#define CONNECT 1
-#define DISCONNECT 0
 
 typedef struct 
 {
@@ -50,7 +45,8 @@ typedef struct
     int port;
     char local_host[STR_LEN];
     int local_port;
-    QueueHandle_t queue_local_s_handler;
+    SemaphoreHandle_t activate_semaphore;
+    SemaphoreHandle_t stop_semaphore;
 } task_tcp_params_t;
 
 void tcp_client_main(char *host, int port, char *local_host, int local_port);
@@ -61,21 +57,21 @@ void local_server_task(void *pvParameters);
 
 //uint8_t tcp_server_connect(char *host, int port);
 
-esp_err_t tcp_create_socket(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, char *host, int port);
+void tcp_create_socket(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, char *host, int port);
 
-esp_err_t tcp_connect_to_host(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, struct timeval *timeout_ptr, char *host, int port);
+esp_err_t tcp_connect_to_host(const char *LOCAL_FUNCTION_TAG, struct sockaddr_in *dest_addr_ptr, int *sock_ptr, struct timeval *timeout_ptr, char *host, int port);
 
-uint8_t tcp_communicate_loop(int *sock_ptr, QueueHandle_t queue_local_s_handler);
+uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int *sock_ptr, SemaphoreHandle_t stop_semaphore);
 
-esp_err_t transmit_receive(char *tx_buffer, char *rx_buffer, int *sock_ptr);
+esp_err_t transmit_receive(const char *LOCAL_FUNCTION_TAG, char *tx_buffer, char *rx_buffer, int *sock_ptr);
 
-esp_err_t login(char *tx_buffer, char *rx_buffer, int *sock_ptr);
+esp_err_t login(const char *LOCAL_FUNCTION_TAG, char *tx_buffer, char *rx_buffer, int *sock_ptr);
 
-esp_err_t send_keep_alive(char *tx_buffer, char *rx_buffer, int *sock_ptr);
+esp_err_t send_keep_alive(const char *LOCAL_FUNCTION_TAG, char *tx_buffer, char *rx_buffer, int *sock_ptr);
 
 void keep_alive_task(void *pvParameters);
 
-esp_err_t check_ack(char *rx_buffer);
+esp_err_t check_ack(const char *LOCAL_FUNCTION_TAG, char *rx_buffer);
 
 void build_command(char *string_com, ...);
 

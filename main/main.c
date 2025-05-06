@@ -13,16 +13,17 @@ const char *TAG = "MAIN";
 //wifi credentials
 //#define SSID "Totalplay-2.4G-b518"
 //#define PASS "Qxm2EAzh99Ce7Lfk"
-//#define SSID "COTA_PC"
-//#define PASS "0402{V8z"
-#define SSID "IoT_AP"
-#define PASS "12345678"
+#define SSID "COTA_PC"
+#define PASS "0402{V8z"
+//#define SSID "IoT_AP"
+//#define PASS "12345678"
 
 //tcp host and port
-#define IOT_IP_ADDR "82.180.173.228" 
-#define IOT_PORT 8090
+//#define IOT_IP_ADDR "82.180.173.228" 
+#define IOT_IP_ADDR "192.168.137.1" 
+#define IOT_PORT 8250
 
-#define LOCAL_IP_ADDR "192.168.0.183" 
+#define LOCAL_IP_ADDR "192.168.137.34" 
 #define LOCAL_PORT 8250
 
 void app_main(void)
@@ -41,6 +42,6 @@ void app_main(void)
 
     while(1)
     {
-        vTaskDelay(pdMS_TO_TICKS(10));
+        vTaskDelay(pdMS_TO_TICKS(50));
     }
 }
