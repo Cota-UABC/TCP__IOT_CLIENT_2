@@ -18,6 +18,8 @@
 #define REAL_TIME_PORT "80"
 #define REAL_TIME_IP "213.188.196.246"
 
+extern SemaphoreHandle_t seconds_mutex;
+extern uint32_t clock_seconds;
 
 uint32_t get_real_time();
 

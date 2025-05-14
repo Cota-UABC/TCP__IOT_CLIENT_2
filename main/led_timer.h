@@ -14,10 +14,14 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <inttypes.h>
 
-#include "real_time.h"
+#include "nvs_esp.h"
+#include "clock.h"
 #include "gpio.h"
 
-void clock_task(void *pvParameters);
+extern char *nvs_key_H, *nvs_key_N, *nvs_key_F;
+
+void led_timer_task(void *pvParameters);
 
 #endif 

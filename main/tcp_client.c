@@ -185,7 +185,8 @@ esp_err_t tcp_connect_to_host(const char *LOCAL_FUNCTION_TAG, struct sockaddr_in
 uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int *sock_ptr, SemaphoreHandle_t stop_semaphore)
 {    
     char tx_buffer[STR_LEN], rx_buffer[STR_LEN], command[COMMANDS_MAX_QUANTITY][STR_LEN/2], local_buffer[STR_LEN*2], local_buffer_2[STR_LEN/2];
-    uint8_t error_counter = 0, return_f = UNDEFINED, temp;
+    uint8_t error_counter = 0, return_f = UNDEFINED;
+    uint32_t temp_32;
     float adc_value = 0;
 
     char ack_msg[5] = "ACK";
@@ -265,7 +266,9 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int *sock_ptr, Sema
                 {
                     write_nvs((char *)nvs_key_N, command[VALUE_C], TRUE );
 
-                    sprintf(local_buffer, "%s:%s", ack_msg, command[VALUE_C]);
+                    temp_32 = (uint32_t)atoi(command[VALUE_C]);
+
+                    sprintf(local_buffer, "%s:%d", ack_msg, (int)temp_32);
                     send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
                     ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
                 }
@@ -273,7 +276,9 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int *sock_ptr, Sema
                 {
                     write_nvs((char *)nvs_key_F, command[VALUE_C], TRUE );
 
-                    sprintf(local_buffer, "%s:%s", ack_msg, command[VALUE_C]);
+                    temp_32 = (uint32_t)atoi(command[VALUE_C]);
+
+                    sprintf(local_buffer, "%s:%d", ack_msg, (int)temp_32);
                     send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
                     ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
                 }

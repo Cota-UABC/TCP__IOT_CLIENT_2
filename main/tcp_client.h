@@ -14,10 +14,12 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <inttypes.h>
 
 #include "gpio.h"
 #include "adc.h"
 #include "nvs_esp.h"
+#include "clock.h"
 #include "led_timer.h"
 
 #define STR_LEN 128

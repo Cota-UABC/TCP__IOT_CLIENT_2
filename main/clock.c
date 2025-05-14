@@ -1,4 +1,4 @@
-#include "real_time.h"
+#include "clock.h"
 
 static const char *TAG_CLK = "TIME";
 
@@ -43,10 +43,7 @@ uint32_t get_real_time()
     }
 
     send(sock, REQUEST, strlen(REQUEST), 0);
-    printf("Request send\n");
-    
     len = recv(sock, rx_buffer, sizeof(rx_buffer) - 1, 0);
-    printf("Recieved len: %d", len);
     if(len > 0) 
     {
         rx_buffer[len] = '\0';
@@ -109,6 +106,8 @@ void clock_task(void *pvParameters)
     while(1)
     {
         vTaskDelay(pdMS_TO_TICKS(1000));
+        if(clock_seconds % 10 == 0)
+            ESP_LOGE(TAG_CLK, "TIME: %d", (int)clock_seconds);
 
         if(xSemaphoreTake(seconds_mutex, portMAX_DELAY))
         {
