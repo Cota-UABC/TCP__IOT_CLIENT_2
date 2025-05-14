@@ -7,41 +7,47 @@
 #include "wifi.h"
 #include "gpio.h"
 #include "adc.h"
+#include "real_time.h"
 
 const char *TAG = "MAIN";
 
 //wifi credentials
-//#define SSID "Totalplay-2.4G-b518"
-//#define PASS "Qxm2EAzh99Ce7Lfk"
-#define SSID "COTA_PC"
-#define PASS "0402{V8z"
+#define SSID "Totalplay-2.4G-b518"
+#define PASS "Qxm2EAzh99Ce7Lfk"
+//#define SSID "COTA_PC"
+//#define PASS "0402{V8z"
 //#define SSID "IoT_AP"
 //#define PASS "12345678"
+//#define SSID "Totalplay-CF3C"
+//#define PASS "SL4'fwM3\\#2H"
 
 //tcp host and port
-//#define IOT_IP_ADDR "82.180.173.228" 
-#define IOT_IP_ADDR "192.168.137.1" 
-#define IOT_PORT 8250
+//#define REMOTE_IP_ADDR "82.180.173.228" 
+#define REMOTE_IP_ADDR "192.168.137.1" 
+#define REMOTE_PORT 8250
 
-#define LOCAL_IP_ADDR "192.168.137.34" 
+#define LOCAL_IP_ADDR "192.168.100.13" 
 #define LOCAL_PORT 8250
 
 void app_main(void)
 {
     init_gpio();
     adc_init();
+    ESP_ERROR_CHECK(init_nvs());
 
     if(wifi_connect(SSID, PASS) == ESP_FAIL)
     {
-        ESP_LOGE(TAG_W, "Could not connect to wifi, restarting...");
+        ESP_LOGE(TAG, "Could not connect to wifi, restarting...");
         vTaskDelay(pdMS_TO_TICKS(7000));
         esp_restart();
     }
 
-    tcp_client_main(IOT_IP_ADDR, IOT_PORT, LOCAL_IP_ADDR, LOCAL_PORT);
-
+    tcp_client_main(REMOTE_IP_ADDR, REMOTE_PORT, LOCAL_IP_ADDR, LOCAL_PORT);
+    
     while(1)
     {
-        vTaskDelay(pdMS_TO_TICKS(50));
+        //get_real_time();
+
+        vTaskDelay(pdMS_TO_TICKS(5000));
     }
 }

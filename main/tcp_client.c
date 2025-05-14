@@ -1,8 +1,8 @@
 #include "tcp_client.h"
 
-static const char *TAG_T = "tcp_client";
-static const char *TAG_T_REMOTE = "tcp_remote_client";
-static const char *TAG_T_LOCAL = "tcp_local_client";
+static const char *TAG_T = "tcp_client", *TAG_T_REMOTE = "tcp_remote_client", *TAG_T_LOCAL = "tcp_local_client";
+
+char *nvs_key_H = "Habilitar", *nvs_key_N = "Prender", *nvs_key_F = "Apagar";
 
 void tcp_client_main(char *host, int port, char *local_host, int local_port) 
 {
@@ -35,8 +35,6 @@ void remote_server_task(void *pvParameters)
     struct sockaddr_in dest_addr;
     int sock;
     struct timeval timeout;
-
-    uint8_t return_f = UNDEFINED;
 
     /*
     xSemaphoreGive(params->activate_semaphore);
@@ -74,7 +72,7 @@ void remote_server_task(void *pvParameters)
         xSemaphoreGive(params->stop_semaphore);
         xSemaphoreTake(params->activate_semaphore, pdMS_TO_TICKS(10));
 
-        return_f = tcp_communicate_loop(TAG_T_REMOTE, &sock, NULL);
+        tcp_communicate_loop(TAG_T_REMOTE, &sock, NULL);
 
         shutdown(sock, 0);
     }
@@ -187,8 +185,8 @@ esp_err_t tcp_connect_to_host(const char *LOCAL_FUNCTION_TAG, struct sockaddr_in
 
 uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int *sock_ptr, SemaphoreHandle_t stop_semaphore)
 {    
-    char tx_buffer[STR_LEN], rx_buffer[STR_LEN], local_buffer[STR_LEN];
-    uint8_t error_counter = 0, return_f = UNDEFINED;
+    char tx_buffer[STR_LEN], rx_buffer[STR_LEN], command[COMMANDS_MAX_QUANTITY][STR_LEN/2], local_buffer[STR_LEN*2], local_buffer_2[STR_LEN/2];
+    uint8_t error_counter = 0, return_f = UNDEFINED, temp;
     float adc_value = 0;
 
     TaskHandle_t keep_alive_handle = NULL;
@@ -207,7 +205,7 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int *sock_ptr, Sema
     char nack_msg[5] = "NACK";
     while(error_counter < MAX_ERROR_COUNT)
     {
-        //check semaphore if received
+        //check stop semaphore
         if(stop_semaphore != NULL)
         {
             if(xSemaphoreTake(stop_semaphore, pdMS_TO_TICKS(SEMAPHORE_MS_WAIT)) == pdTRUE)
@@ -232,27 +230,56 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int *sock_ptr, Sema
             rx_buffer[len] = '\0';
             ESP_LOGI(LOCAL_FUNCTION_TAG, "RX: %s", rx_buffer);
 
-            //unfinished rx check
-            if(strncmp(rx_buffer, "UABC:a1264598:W:L:1", 19) == 0)
+            seperate_commands(rx_buffer, command);
+
+            if(strcmp(command[OPERATION_C], WRITE_O) == 0)
             {
-                set_led(1);
-                sprintf(local_buffer, "%s:1", ack_msg);
-                send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
-                ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
+                if(strcmp(command[RESOURCE_C], LED_R) == 0)
+                {
+                    if(strcmp(command[VALUE_C], "1") == 0)
+                        set_led(1);
+                    else if(strcmp(command[VALUE_C], "0") == 0)
+                        set_led(0);
+
+                    sprintf(local_buffer, "%s:%s", ack_msg, command[VALUE_C]);
+                    send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
+                    ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
+                }
+                if(strcmp(command[RESOURCE_C], HABILITAR_R) == 0)
+                {
+                    if(*command[VALUE_C] == '1' || *command[VALUE_C] == '0')
+                    {
+                        write_nvs((char *)nvs_key_H, (char[]){*command[VALUE_C], '\0'} );
+
+                        sprintf(local_buffer, "%s:1", ack_msg);
+                        send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
+                        ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
+                    }
+                    else
+                    {
+                        send(*sock_ptr, nack_msg, strlen(nack_msg), 0);
+                        ESP_LOGE(LOCAL_FUNCTION_TAG, "H value invalid: %s. TX: %s", command[VALUE_C], nack_msg);
+                    }
+                }
             }
-            else if(strncmp(rx_buffer, "UABC:a1264598:W:L:0", 19) == 0)
+            else if(strcmp(command[OPERATION_C], READ_O) == 0)
             {
-                set_led(0);
-                sprintf(local_buffer, "%s:0", ack_msg);
-                send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
-                ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
-            }
-            else if(strncmp(rx_buffer, "UABC:a1264598:R:A", 17) == 0)
-            {
-                adc_value = read_adc_input(CHANNEL_0);
-                sprintf(local_buffer, "%s:%.2f", ack_msg, adc_value);
-                send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
-                ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
+                if(strcmp(command[RESOURCE_C], ADC_R) == 0)
+                {
+                    adc_value = read_adc_input(CHANNEL_0);
+                    sprintf(local_buffer, "%s:%.2f", ack_msg, adc_value);
+                    send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
+                    ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
+                }
+                if(strcmp(command[RESOURCE_C], HABILITAR_R) == 0)
+                {
+                    strncpy(local_buffer_2, "NULL", sizeof(local_buffer_2));
+                    read_nvs((char *)nvs_key_H, local_buffer_2, sizeof(local_buffer_2));
+
+                    sprintf(local_buffer, "%s:%s", ack_msg, local_buffer_2);
+                    send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
+                    ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
+                }
             }
             else
             {
@@ -379,6 +406,40 @@ void build_command(char *string_com, ...)
         strcat(string_com, ":");
     }
     va_end(args);
+}
+
+void seperate_commands(char *rx_buffer, char command[][STR_LEN/2])
+{
+    char *local_ptr= rx_buffer;;
+    uint16_t counter_cmmd= 0, counter_word= 0;
+
+    //initialize commands
+    for(int i=0; i<COMMANDS_MAX_QUANTITY; i++)
+        *command[i] = '\0';
+
+    //separate by delimiter
+    while(*local_ptr != '\0')
+    {
+        if(*local_ptr == ':')
+        {
+            command[counter_cmmd][counter_word] = '\0'; // terminator
+            counter_cmmd++;
+            if(counter_cmmd == COMMANDS_MAX_QUANTITY)
+            {
+                counter_cmmd--;
+                break;
+            }
+            counter_word = 0;
+        }
+        else
+        {
+            if(counter_word == sizeof(command[0])) counter_word=0; //buffer overflow fix
+            command[counter_cmmd][counter_word] = *local_ptr;
+            counter_word++;
+        }
+        local_ptr++;
+    }
+    command[counter_cmmd][counter_word] = '\0'; // terminator
 }
 
 //check connection to google

@@ -17,12 +17,10 @@
 
 #include "gpio.h"
 #include "adc.h"
+#include "nvs_esp.h"
 
 #define STR_LEN 128
 #define COMMANDS_MAX_QUANTITY 10
-
-//#define CONNECT_MAX_RETRY 2
-#define MAX_ERROR_COUNT 2
 
 //server exit flags
 #define UNDEFINED 0
@@ -35,9 +33,30 @@
 #define HOST_GOOGLE "142.250.188.14" //Google
 #define PORT_GOOGLE 80
 
+//client wait time
 #define REMOTE_MS_WAIT 4000
 #define SEMAPHORE_MS_WAIT 20
 #define KEEP_ALIVE_MS_WAIT 10000
+
+#define MAX_ERROR_COUNT 2
+
+//command parts
+#define ID_C 0
+#define USER_C 1
+#define OPERATION_C 2
+#define RESOURCE_C 3
+#define VALUE_C 4
+
+//operations
+#define WRITE_O "W"
+#define READ_O "R"
+
+//resources
+#define LED_R "L"
+#define ADC_R "A"
+#define HABILITAR_R "H"
+#define ENCENDER_R "N"
+#define APAGAR_R "F"
 
 typedef struct 
 {
@@ -55,7 +74,6 @@ void remote_server_task(void *pvParameters);
 
 void local_server_task(void *pvParameters);
 
-//uint8_t tcp_server_connect(char *host, int port);
 
 void tcp_create_socket(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, char *host, int port);
 
@@ -74,6 +92,9 @@ void keep_alive_task(void *pvParameters);
 esp_err_t check_ack(const char *LOCAL_FUNCTION_TAG, char *rx_buffer);
 
 void build_command(char *string_com, ...);
+
+void seperate_commands(char *rx_buffer, char command[][STR_LEN/2]);
+
 
 esp_err_t check_internet_connection();
 
