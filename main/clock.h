@@ -1,5 +1,5 @@
-#ifndef REAL_TIME
-#define REAL_TIME
+#ifndef CLOCK
+#define CLOCK
 
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -20,5 +20,9 @@
 
 
 uint32_t get_real_time();
+
+void start_clock();
+
+void clock_task(void *pvParameters);
 
 #endif 

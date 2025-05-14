@@ -7,7 +7,8 @@
 #include "wifi.h"
 #include "gpio.h"
 #include "adc.h"
-#include "real_time.h"
+#include "clock.h"
+#include "led_timer.h"
 
 const char *TAG = "MAIN";
 
@@ -41,13 +42,15 @@ void app_main(void)
         vTaskDelay(pdMS_TO_TICKS(7000));
         esp_restart();
     }
+   
+    start_clock();
 
     tcp_client_main(REMOTE_IP_ADDR, REMOTE_PORT, LOCAL_IP_ADDR, LOCAL_PORT);
+
+    xTaskCreate(led_timer_task, "led_timer_task", 4096, NULL, 3, NULL);
     
     while(1)
     {
-        //get_real_time();
-
-        vTaskDelay(pdMS_TO_TICKS(5000));
+        vTaskDelay(pdMS_TO_TICKS(50));
     }
 }

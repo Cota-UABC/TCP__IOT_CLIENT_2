@@ -18,6 +18,7 @@
 #include "gpio.h"
 #include "adc.h"
 #include "nvs_esp.h"
+#include "led_timer.h"
 
 #define STR_LEN 128
 #define COMMANDS_MAX_QUANTITY 10

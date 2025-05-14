@@ -11,8 +11,8 @@ extern char *TAG_NVS, *key_ssid, *key_pass, *key_dev_name, *key_user, *key_dev_n
 
 esp_err_t init_nvs();
 
-esp_err_t read_nvs(char *key, char *value, size_t len);
+esp_err_t read_nvs(char *key, char *value, size_t len, uint8_t print);
 
-esp_err_t write_nvs(char *key, char *value);
+esp_err_t write_nvs(char *key, char *value, uint8_t print);
 
 #endif

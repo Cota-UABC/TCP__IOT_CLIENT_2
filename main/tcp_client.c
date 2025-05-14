@@ -2,7 +2,6 @@
 
 static const char *TAG_T = "tcp_client", *TAG_T_REMOTE = "tcp_remote_client", *TAG_T_LOCAL = "tcp_local_client";
 
-char *nvs_key_H = "Habilitar", *nvs_key_N = "Prender", *nvs_key_F = "Apagar";
 
 void tcp_client_main(char *host, int port, char *local_host, int local_port) 
 {
@@ -189,6 +188,9 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int *sock_ptr, Sema
     uint8_t error_counter = 0, return_f = UNDEFINED, temp;
     float adc_value = 0;
 
+    char ack_msg[5] = "ACK";
+    char nack_msg[5] = "NACK";
+
     TaskHandle_t keep_alive_handle = NULL;
     SemaphoreHandle_t keep_alive_semaphore;
 
@@ -200,9 +202,7 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int *sock_ptr, Sema
 
     xTaskCreate(keep_alive_task, "keep_alive_task", 4096, (void *)keep_alive_semaphore, 4, &keep_alive_handle);
 
-    //WIP
-    char ack_msg[5] = "ACK";
-    char nack_msg[5] = "NACK";
+
     while(error_counter < MAX_ERROR_COUNT)
     {
         //check stop semaphore
@@ -245,13 +245,13 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int *sock_ptr, Sema
                     send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
                     ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
                 }
-                if(strcmp(command[RESOURCE_C], HABILITAR_R) == 0)
+                else if(strcmp(command[RESOURCE_C], HABILITAR_R) == 0)
                 {
                     if(*command[VALUE_C] == '1' || *command[VALUE_C] == '0')
                     {
-                        write_nvs((char *)nvs_key_H, (char[]){*command[VALUE_C], '\0'} );
+                        write_nvs((char *)nvs_key_H, (char[]){*command[VALUE_C], '\0'}, TRUE );
 
-                        sprintf(local_buffer, "%s:1", ack_msg);
+                        sprintf(local_buffer, "%s:%c", ack_msg, *command[VALUE_C]);
                         send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
                         ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
                     }
@@ -260,6 +260,27 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int *sock_ptr, Sema
                         send(*sock_ptr, nack_msg, strlen(nack_msg), 0);
                         ESP_LOGE(LOCAL_FUNCTION_TAG, "H value invalid: %s. TX: %s", command[VALUE_C], nack_msg);
                     }
+                }
+                else if(strcmp(command[RESOURCE_C], ENCENDER_R) == 0)
+                {
+                    write_nvs((char *)nvs_key_N, command[VALUE_C], TRUE );
+
+                    sprintf(local_buffer, "%s:%s", ack_msg, command[VALUE_C]);
+                    send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
+                    ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
+                }
+                else if(strcmp(command[RESOURCE_C], APAGAR_R) == 0)
+                {
+                    write_nvs((char *)nvs_key_F, command[VALUE_C], TRUE );
+
+                    sprintf(local_buffer, "%s:%s", ack_msg, command[VALUE_C]);
+                    send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
+                    ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
+                }
+                else
+                {
+                    send(*sock_ptr, nack_msg, strlen(nack_msg), 0);
+                    ESP_LOGE(LOCAL_FUNCTION_TAG, "TX: %s", nack_msg);
                 }
             }
             else if(strcmp(command[OPERATION_C], READ_O) == 0)
@@ -271,14 +292,37 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int *sock_ptr, Sema
                     send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
                     ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
                 }
-                if(strcmp(command[RESOURCE_C], HABILITAR_R) == 0)
+                else if(strcmp(command[RESOURCE_C], HABILITAR_R) == 0)
                 {
                     strncpy(local_buffer_2, "NULL", sizeof(local_buffer_2));
-                    read_nvs((char *)nvs_key_H, local_buffer_2, sizeof(local_buffer_2));
+                    read_nvs((char *)nvs_key_H, local_buffer_2, sizeof(local_buffer_2), TRUE);
 
                     sprintf(local_buffer, "%s:%s", ack_msg, local_buffer_2);
                     send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
                     ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
+                }
+                else if(strcmp(command[RESOURCE_C], ENCENDER_R) == 0)
+                {
+                    strncpy(local_buffer_2, "NULL", sizeof(local_buffer_2));
+                    read_nvs((char *)nvs_key_N, local_buffer_2, sizeof(local_buffer_2), TRUE);
+
+                    sprintf(local_buffer, "%s:%s", ack_msg, local_buffer_2);
+                    send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
+                    ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
+                }
+                else if(strcmp(command[RESOURCE_C], APAGAR_R) == 0)
+                {
+                    strncpy(local_buffer_2, "NULL", sizeof(local_buffer_2));
+                    read_nvs((char *)nvs_key_F, local_buffer_2, sizeof(local_buffer_2), TRUE);
+
+                    sprintf(local_buffer, "%s:%s", ack_msg, local_buffer_2);
+                    send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
+                    ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
+                }
+                else
+                {
+                    send(*sock_ptr, nack_msg, strlen(nack_msg), 0);
+                    ESP_LOGE(LOCAL_FUNCTION_TAG, "TX: %s", nack_msg);
                 }
             }
             else
