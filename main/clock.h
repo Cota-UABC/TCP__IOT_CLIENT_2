@@ -3,20 +3,34 @@
 
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <time.h>
+#include <sys/time.h>
 #include "esp_err.h"
 #include "esp_log.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
+#include "freertos/event_groups.h"
+#include "freertos/queue.h"
+
+#include "lwip/inet.h"
+#include "lwip/netdb.h"
+#include "lwip/sockets.h"
+#include "lwip/ip_addr.h"
+
+#include "esp_netif.h"
+#include "esp_event.h"
 
 #include <string.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <unistd.h>
 
-#define REAL_TIME_PORT "80"
-#define REAL_TIME_IP "213.188.196.246"
+#define NTP_HOST "132.248.30.3"
+#define NTP_PORT 123
 
 extern SemaphoreHandle_t seconds_mutex;
 extern uint32_t clock_seconds;
