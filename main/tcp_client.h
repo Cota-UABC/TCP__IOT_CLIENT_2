@@ -25,6 +25,8 @@
 #define STR_LEN 128
 #define COMMANDS_MAX_QUANTITY 10
 
+#define MAX_ERROR_COUNT 3
+
 //server exit flags
 #define UNDEFINED 0
 #define COMMUNICATION_FAIL 1
@@ -41,7 +43,6 @@
 #define SEMAPHORE_MS_WAIT 20
 #define KEEP_ALIVE_MS_WAIT 10000
 
-#define MAX_ERROR_COUNT 2
 
 //command parts
 #define ID_C 0
