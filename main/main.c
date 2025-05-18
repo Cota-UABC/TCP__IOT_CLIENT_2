@@ -27,7 +27,7 @@ const char *TAG = "MAIN";
 #define REMOTE_IP_ADDR "192.168.137.1" 
 #define REMOTE_PORT 8250
 
-#define LOCAL_IP_ADDR "192.168.100.13" 
+#define LOCAL_IP_ADDR "192.168.100.182" 
 #define LOCAL_PORT 8250
 
 void app_main(void)

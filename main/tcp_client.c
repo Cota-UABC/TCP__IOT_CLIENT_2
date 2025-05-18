@@ -35,7 +35,7 @@ void remote_server_task(void *pvParameters)
     int sock;
     struct timeval timeout;
 
-    /*
+    /* TESTING
     xSemaphoreGive(params->activate_semaphore);
     ESP_LOGI(TAG_T_REMOTE, "smaphore given...");
 
@@ -61,10 +61,11 @@ void remote_server_task(void *pvParameters)
         
         if(tcp_connect_to_host(NULL, &dest_addr, &sock, &timeout, params->host, params->port) == ESP_FAIL)
         {
-            ESP_LOGE(TAG_T_REMOTE, "Could not connect to remote server...");
+            //ESP_LOGE(TAG_T_REMOTE, "Could not connect to remote server...");
             xSemaphoreGive(params->activate_semaphore);
             xSemaphoreTake(params->stop_semaphore, pdMS_TO_TICKS(10));
             vTaskDelay(pdMS_TO_TICKS(REMOTE_MS_WAIT));
+            shutdown(sock, 0);
             continue;
         }
 
@@ -153,6 +154,9 @@ void tcp_create_socket(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, char *h
     *sock_ptr = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
     if (*sock_ptr < 0) {
         ESP_LOGE(TAG_T, "Unable to create socket");
+        
+        int err = errno;
+        ESP_LOGE(TAG_T, "On socket(). Error num: %d (%s)", err, strerror(err));
         return;
     }
     //ESP_LOGI(TAG_T, "Socket created successfully");
@@ -170,9 +174,14 @@ esp_err_t tcp_connect_to_host(const char *LOCAL_FUNCTION_TAG, struct sockaddr_in
     timeout_ptr->tv_usec = 0;
     setsockopt(*sock_ptr, SOL_SOCKET, SO_RCVTIMEO, timeout_ptr, sizeof *timeout_ptr);
 
-    if (connect(*sock_ptr, (struct sockaddr *)dest_addr_ptr, sizeof(*dest_addr_ptr)) != 0) 
+    if(connect(*sock_ptr, (struct sockaddr *)dest_addr_ptr, sizeof(*dest_addr_ptr)) != 0) 
     {
-        //ESP_LOGE(TAG_T, "Socket unable to connect to host");
+        if(LOCAL_FUNCTION_TAG != NULL)
+        {
+            int err = errno;
+            ESP_LOGE(LOCAL_FUNCTION_TAG, "Socket unable to connect to host. Error num: %d (%s)", err, strerror(err));
+        }
+
         close(*sock_ptr);
         return ESP_FAIL;
     }
@@ -371,7 +380,10 @@ esp_err_t transmit_receive(const char *LOCAL_FUNCTION_TAG, char *tx_buffer, char
     }
     else
     {
-        ESP_LOGE(LOCAL_FUNCTION_TAG, "Error occured in RX");
+        ESP_LOGE(LOCAL_FUNCTION_TAG, "Error occured in RX. Lenght: %d", len);
+
+        int err = errno;
+        ESP_LOGE(LOCAL_FUNCTION_TAG, "On recv(). Error num: %d (%s)", err, strerror(err));
         return ESP_FAIL;
     }
 }
@@ -523,6 +535,10 @@ esp_err_t check_internet_connection()
         if(len < 0) 
         {
             //ESP_LOGE(TAG_T, "Error occurred during receiving: errno %d", errno);
+            ESP_LOGE("Internet", "Error occured in RX. Lenght: %d", len);
+
+            int err = errno;
+            ESP_LOGE("Internet", "On recv(). Error num: %d (%s)", err, strerror(err));
             return_v = ESP_FAIL;
         }
 
