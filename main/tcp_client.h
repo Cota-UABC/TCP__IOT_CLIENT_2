@@ -23,14 +23,18 @@
 #include "led_timer.h"
 
 #define STR_LEN 128
+
 #define COMMANDS_MAX_QUANTITY 10
 
-#define MAX_ERROR_COUNT 3
+#define MAX_ERROR_TCP_LOOP 3
+#define MAX_ERROR_RECV 5
 
-//server exit flags
+//exit flags
 #define UNDEFINED 0
-#define COMMUNICATION_FAIL 1
-#define STOP_SEMAPHORE 2
+#define COMMUNICATION_OK 2
+#define COMMUNICATION_FAIL 3
+#define CONNECTION_CLOSED 4
+#define STOP_SEMAPHORE 5
 
 #define TRUE 1
 #define FALSE 2
@@ -39,9 +43,12 @@
 #define PORT_GOOGLE 80
 
 //client wait time
+#define SOCKET_TIMEOUT_SEC 1
 #define REMOTE_MS_WAIT 4000
 #define SEMAPHORE_MS_WAIT 20
-#define KEEP_ALIVE_MS_WAIT 10000
+
+//keep alive
+#define KEEP_ALIVE_MS 10000
 
 
 //command parts
@@ -79,17 +86,17 @@ void remote_server_task(void *pvParameters);
 void local_server_task(void *pvParameters);
 
 
-void tcp_create_socket(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, char *host, int port);
+void tcp_create_socket(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, struct timeval *timeout_ptr, char *host, int port);
 
-esp_err_t tcp_connect_to_host(const char *LOCAL_FUNCTION_TAG, struct sockaddr_in *dest_addr_ptr, int *sock_ptr, struct timeval *timeout_ptr, char *host, int port);
+esp_err_t tcp_connect_to_host(const char *LOCAL_FUNCTION_TAG, struct sockaddr_in *dest_addr_ptr, int *sock_ptr, char *host, int port);
 
 uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int *sock_ptr, SemaphoreHandle_t stop_semaphore);
 
-esp_err_t transmit_receive(const char *LOCAL_FUNCTION_TAG, char *tx_buffer, char *rx_buffer, int *sock_ptr);
+uint8_t transmit_receive(const char *LOCAL_FUNCTION_TAG, char *tx_buffer, char *rx_buffer, int *sock_ptr);
 
-esp_err_t login(const char *LOCAL_FUNCTION_TAG, char *tx_buffer, char *rx_buffer, int *sock_ptr);
+//esp_err_t login(const char *LOCAL_FUNCTION_TAG, char *tx_buffer, char *rx_buffer, int *sock_ptr);
 
-esp_err_t send_keep_alive(const char *LOCAL_FUNCTION_TAG, char *tx_buffer, char *rx_buffer, int *sock_ptr);
+//esp_err_t send_keep_alive(const char *LOCAL_FUNCTION_TAG, char *tx_buffer, char *rx_buffer, int *sock_ptr);
 
 void keep_alive_task(void *pvParameters);
 

@@ -37,7 +37,7 @@ void remote_server_task(void *pvParameters)
 
     /* TESTING
     xSemaphoreGive(params->activate_semaphore);
-    ESP_LOGI(TAG_T_REMOTE, "smaphore given...");
+    ESP_LOGI(TAG_T_REMOTE, "semaphore given...");
 
 
     while(1)
@@ -57,11 +57,11 @@ void remote_server_task(void *pvParameters)
         }
         ESP_LOGI(TAG_T_REMOTE, "Internet connection detected");
 
-        tcp_create_socket(&dest_addr, &sock, params->host, params->port);
+        tcp_create_socket(&dest_addr, &sock, &timeout, params->host, params->port);
         
-        if(tcp_connect_to_host(NULL, &dest_addr, &sock, &timeout, params->host, params->port) == ESP_FAIL)
+        if(tcp_connect_to_host(NULL, &dest_addr, &sock, params->host, params->port) == ESP_FAIL)
         {
-            //ESP_LOGE(TAG_T_REMOTE, "Could not connect to remote server...");
+            ESP_LOGE(TAG_T_REMOTE, "Could not connect to remote server...");
             xSemaphoreGive(params->activate_semaphore);
             xSemaphoreTake(params->stop_semaphore, pdMS_TO_TICKS(10));
             vTaskDelay(pdMS_TO_TICKS(REMOTE_MS_WAIT));
@@ -112,9 +112,9 @@ void local_server_task(void *pvParameters)
                     {ESP_LOGW(TAG_T_LOCAL, "Stop semaphore taken...");
                     break;}
 
-                tcp_create_socket(&dest_addr, &sock, params->local_host, params->local_port);
+                tcp_create_socket(&dest_addr, &sock, &timeout, params->local_host, params->local_port);
 
-                if(tcp_connect_to_host(TAG_T_LOCAL, &dest_addr, &sock, &timeout, params->local_host, params->local_port) == ESP_FAIL)
+                if(tcp_connect_to_host(TAG_T_LOCAL, &dest_addr, &sock, params->local_host, params->local_port) == ESP_FAIL)
                 {
                     ESP_LOGE(TAG_T_LOCAL, "Could not connect to server...");
                     vTaskDelay(pdMS_TO_TICKS(2000));
@@ -143,10 +143,8 @@ void local_server_task(void *pvParameters)
     vTaskDelete(NULL);
 }
 
-void tcp_create_socket(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, char *host, int port)
+void tcp_create_socket(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, struct timeval *timeout_ptr, char *host, int port)
 {
-    //ESP_LOGW(TAG_T, "Creating socket...");
-
     dest_addr_ptr->sin_addr.s_addr = inet_addr(host);
     dest_addr_ptr->sin_family = AF_INET;
     dest_addr_ptr->sin_port = htons(port);
@@ -159,20 +157,19 @@ void tcp_create_socket(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, char *h
         ESP_LOGE(TAG_T, "On socket(). Error num: %d (%s)", err, strerror(err));
         return;
     }
-    //ESP_LOGI(TAG_T, "Socket created successfully");
+    
+    // Set timeout
+    timeout_ptr->tv_sec = SOCKET_TIMEOUT_SEC;
+    timeout_ptr->tv_usec = 0;
+    setsockopt(*sock_ptr, SOL_SOCKET, SO_RCVTIMEO, timeout_ptr, sizeof *timeout_ptr);
 
     return;
 }
 
-esp_err_t tcp_connect_to_host(const char *LOCAL_FUNCTION_TAG, struct sockaddr_in *dest_addr_ptr, int *sock_ptr, struct timeval *timeout_ptr, char *host, int port)
+esp_err_t tcp_connect_to_host(const char *LOCAL_FUNCTION_TAG, struct sockaddr_in *dest_addr_ptr, int *sock_ptr, char *host, int port)
 {
     if(LOCAL_FUNCTION_TAG != NULL)
         ESP_LOGW(LOCAL_FUNCTION_TAG, "Connecting to host: %s:%d...", host, port);
-
-    // Set timeout
-    timeout_ptr->tv_sec = 1;
-    timeout_ptr->tv_usec = 0;
-    setsockopt(*sock_ptr, SOL_SOCKET, SO_RCVTIMEO, timeout_ptr, sizeof *timeout_ptr);
 
     if(connect(*sock_ptr, (struct sockaddr *)dest_addr_ptr, sizeof(*dest_addr_ptr)) != 0) 
     {
@@ -193,27 +190,39 @@ esp_err_t tcp_connect_to_host(const char *LOCAL_FUNCTION_TAG, struct sockaddr_in
 
 uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int *sock_ptr, SemaphoreHandle_t stop_semaphore)
 {    
-    char tx_buffer[STR_LEN], rx_buffer[STR_LEN], command[COMMANDS_MAX_QUANTITY][STR_LEN/2], local_buffer[STR_LEN*2], local_buffer_2[STR_LEN/2];
-    uint8_t error_counter = 0, return_f = UNDEFINED;
+    char tx_buffer[STR_LEN], rx_buffer[STR_LEN], command[COMMANDS_MAX_QUANTITY][STR_LEN/2], local_buffer[STR_LEN*2], local_buffer_2[STR_LEN/2],
+        keep_alive[STR_LEN];
+    uint8_t error_counter = 0, return_f;
     uint32_t temp_32;
     float adc_value = 0;
+    int len;
 
     char ack_msg[5] = "ACK";
     char nack_msg[5] = "NACK";
+    build_command(keep_alive, "UABC", "a1264598", "K", "\0");
 
     TaskHandle_t keep_alive_handle = NULL;
     SemaphoreHandle_t keep_alive_semaphore;
 
+
     //send login
-    if(login(LOCAL_FUNCTION_TAG, tx_buffer, rx_buffer, sock_ptr) == ESP_FAIL)
+    build_command(tx_buffer, "UABC", "a1264598", "L", "\0");
+
+    return_f = transmit_receive(LOCAL_FUNCTION_TAG, tx_buffer, rx_buffer, sock_ptr);
+    if(return_f == COMMUNICATION_OK && check_ack(LOCAL_FUNCTION_TAG, rx_buffer) == ESP_OK)
+        ESP_LOGI(LOCAL_FUNCTION_TAG, "Login succesfull");
+    else
+    {
+        ESP_LOGE(LOCAL_FUNCTION_TAG, "Login failed...");
         return COMMUNICATION_FAIL;
+    }
+    return_f = UNDEFINED;
 
+    //keep alive
     keep_alive_semaphore = xSemaphoreCreateBinary();
-
     xTaskCreate(keep_alive_task, "keep_alive_task", 4096, (void *)keep_alive_semaphore, 4, &keep_alive_handle);
 
-
-    while(error_counter < MAX_ERROR_COUNT)
+    while(error_counter < MAX_ERROR_TCP_LOOP)
     {
         //check stop semaphore
         if(stop_semaphore != NULL)
@@ -226,15 +235,31 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int *sock_ptr, Sema
             }
         }
 
-        //send keep alive
+        //if time to send keep alive
         if(xSemaphoreTake(keep_alive_semaphore, pdMS_TO_TICKS(SEMAPHORE_MS_WAIT)) == pdTRUE)
-            if(send_keep_alive(LOCAL_FUNCTION_TAG, tx_buffer, rx_buffer, sock_ptr) == ESP_FAIL)
+        {
+            return_f = transmit_receive(LOCAL_FUNCTION_TAG, keep_alive, rx_buffer, sock_ptr);
+
+            if(return_f == CONNECTION_CLOSED)
+                return return_f;
+            else if(return_f == COMMUNICATION_OK)
+            {
+                if(check_ack(LOCAL_FUNCTION_TAG, rx_buffer) == ESP_FAIL)
+                    error_counter++;
+            }
+            else
+            {
+                ESP_LOGE(LOCAL_FUNCTION_TAG, "Keep alive failed...");
                 error_counter++;
+            }
+
+            return_f = UNDEFINED;
+        }
 
         //Check commands
         rx_buffer[0] = '\0';
 
-        int len = recv(*sock_ptr, rx_buffer, sizeof(rx_buffer) - 1, 0);
+        len = recv(*sock_ptr, rx_buffer, sizeof(rx_buffer) - 1, 0);
         if(len > 0) 
         {
             rx_buffer[len] = '\0';
@@ -345,11 +370,17 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int *sock_ptr, Sema
                 ESP_LOGE(LOCAL_FUNCTION_TAG, "TX: %s", nack_msg);
             }
         }
+        else if(len == 0)
+        {
+            ESP_LOGE(LOCAL_FUNCTION_TAG, "Connection closed by peer.");
+            return_f = CONNECTION_CLOSED;
+            break;
+        }
 
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 
-    if(error_counter >= MAX_ERROR_COUNT)
+    if(error_counter >= MAX_ERROR_TCP_LOOP)
     {
         ESP_LOGE(LOCAL_FUNCTION_TAG, "Max errors occured, exiting...");
         return_f = COMMUNICATION_FAIL;
@@ -363,31 +394,53 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int *sock_ptr, Sema
     return return_f;
 }
 
-esp_err_t transmit_receive(const char *LOCAL_FUNCTION_TAG, char *tx_buffer, char *rx_buffer, int *sock_ptr)
+uint8_t transmit_receive(const char *LOCAL_FUNCTION_TAG, char *tx_buffer, char *rx_buffer, int *sock_ptr)
 {
+    int len, err;
+    uint8_t return_f = UNDEFINED, retry_cnt = 0;
+
     send(*sock_ptr, tx_buffer, strlen(tx_buffer), 0);
     ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", tx_buffer);
 
     rx_buffer[0] = '\0';
 
-    int len = recv(*sock_ptr, rx_buffer, sizeof(rx_buffer) - 1, 0);
-    
-    if(len > 0) 
+    while(retry_cnt < MAX_ERROR_RECV)
     {
-        rx_buffer[len] = '\0';
-        ESP_LOGI(LOCAL_FUNCTION_TAG, "RX: %s", rx_buffer);
-        return ESP_OK;
-    }
-    else
-    {
-        ESP_LOGE(LOCAL_FUNCTION_TAG, "Error occured in RX. Lenght: %d", len);
+        len = recv(*sock_ptr, rx_buffer, sizeof(rx_buffer) - 1, 0);
+        
+        if(len > 0) 
+        {
+            rx_buffer[len] = '\0';
+            ESP_LOGI(LOCAL_FUNCTION_TAG, "RX: %s", rx_buffer);
+            return_f = COMMUNICATION_OK;
+            break;
+        }
+        else if(len == 0)
+        {
+            ESP_LOGE(LOCAL_FUNCTION_TAG, "Connection closed by peer.");
+            return_f = CONNECTION_CLOSED;
+            break;
+        }
+        else
+        {
+            err = errno;
 
-        int err = errno;
-        ESP_LOGE(LOCAL_FUNCTION_TAG, "On recv(). Error num: %d (%s)", err, strerror(err));
-        return ESP_FAIL;
+            if(err == EAGAIN || err == EWOULDBLOCK)
+                ESP_LOGW(LOCAL_FUNCTION_TAG, "recv() timeout, attempt... (%d/%d)", retry_cnt + 1, MAX_ERROR_RECV);
+            else
+            {
+                ESP_LOGE(LOCAL_FUNCTION_TAG, "recv() error: %d (%s)", err, strerror(err));
+                return_f = COMMUNICATION_FAIL;
+                break;
+            }
+        }
+        retry_cnt++;
     }
+
+    return return_f;
 }
 
+/* DEPRECATED
 esp_err_t login(const char *LOCAL_FUNCTION_TAG, char *tx_buffer, char *rx_buffer, int *sock_ptr)
 {
     build_command(tx_buffer, "UABC", "a1264598", "L", "\0");
@@ -407,7 +460,9 @@ esp_err_t login(const char *LOCAL_FUNCTION_TAG, char *tx_buffer, char *rx_buffer
     else
         return ESP_FAIL;
 }
+*/
 
+/* DEPRECATED
 esp_err_t send_keep_alive(const char *LOCAL_FUNCTION_TAG, char *tx_buffer, char *rx_buffer, int *sock_ptr)
 {
     build_command(tx_buffer, "UABC", "a1264598", "K", "\0");
@@ -417,6 +472,7 @@ esp_err_t send_keep_alive(const char *LOCAL_FUNCTION_TAG, char *tx_buffer, char 
     else
         return ESP_FAIL;
 }
+*/
 
 void keep_alive_task(void *pvParameters)
 {
@@ -424,7 +480,7 @@ void keep_alive_task(void *pvParameters)
 
     while(1)
     {
-        vTaskDelay(pdMS_TO_TICKS(KEEP_ALIVE_MS_WAIT));
+        vTaskDelay(pdMS_TO_TICKS(KEEP_ALIVE_MS));
 
         xSemaphoreGive(keep_alive_semaphore);
     }
@@ -517,9 +573,9 @@ esp_err_t check_internet_connection()
 
     //ESP_LOGW(TAG_T, "Pinging Google...");
 
-    tcp_create_socket(&dest_addr, &sock, HOST_GOOGLE, PORT_GOOGLE);
+    tcp_create_socket(&dest_addr, &sock, &timeout, HOST_GOOGLE, PORT_GOOGLE);
     
-    if(tcp_connect_to_host(NULL, &dest_addr, &sock, &timeout, HOST_GOOGLE, PORT_GOOGLE) != ESP_OK)
+    if(tcp_connect_to_host(NULL, &dest_addr, &sock, HOST_GOOGLE, PORT_GOOGLE) != ESP_OK)
     {
         //ESP_LOGE(TAG_T, "Failed to connect to google host. There is no internet connection...");
         return_v = ESP_FAIL;
