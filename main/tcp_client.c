@@ -35,15 +35,6 @@ void remote_server_task(void *pvParameters)
     int sock;
     struct timeval timeout;
 
-    /* TESTING
-    xSemaphoreGive(params->activate_semaphore);
-    ESP_LOGI(TAG_T_REMOTE, "semaphore given...");
-
-
-    while(1)
-        vTaskDelay(pdMS_TO_TICKS(REMOTE_MS_WAIT));
-    */
-   
     while(1)
     {
         ESP_LOGI(TAG_T_REMOTE, "Checking internet connection...");
@@ -199,14 +190,15 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int *sock_ptr, Sema
 
     char ack_msg[5] = "ACK";
     char nack_msg[5] = "NACK";
-    build_command(keep_alive, "UABC", "a1264598", "K", "\0");
+    build_command(keep_alive, ID_TCP, USER_TCP, "K", "\0");
 
     TaskHandle_t keep_alive_handle = NULL;
+    TaskHandle_t reset_esp_handle = NULL;
     SemaphoreHandle_t keep_alive_semaphore;
 
 
     //send login
-    build_command(tx_buffer, "UABC", "a1264598", "L", "\0");
+    build_command(tx_buffer, ID_TCP, USER_TCP, "L", "\0");
 
     return_f = transmit_receive(LOCAL_FUNCTION_TAG, tx_buffer, rx_buffer, sock_ptr);
     if(return_f == COMMUNICATION_OK && check_ack(LOCAL_FUNCTION_TAG, rx_buffer) == ESP_OK)
@@ -267,107 +259,132 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int *sock_ptr, Sema
 
             seperate_commands(rx_buffer, command);
 
-            if(strcmp(command[OPERATION_C], WRITE_O) == 0)
+            if(strcmp(command[ID_C], ID_TCP) == 0 && strcmp(command[USER_C], USER_TCP) == 0)
             {
-                if(strcmp(command[RESOURCE_C], LED_R) == 0)
+                if(strcmp(command[OPERATION_C], WRITE_O) == 0)
                 {
-                    if(strcmp(command[VALUE_C], "1") == 0)
-                        set_led(1);
-                    else if(strcmp(command[VALUE_C], "0") == 0)
-                        set_led(0);
-
-                    sprintf(local_buffer, "%s:%s", ack_msg, command[VALUE_C]);
-                    send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
-                    ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
-                }
-                else if(strcmp(command[RESOURCE_C], HABILITAR_R) == 0)
-                {
-                    if(*command[VALUE_C] == '1' || *command[VALUE_C] == '0')
+                    if(strcmp(command[RESOURCE_C], LED_R) == 0)
                     {
-                        write_nvs((char *)nvs_key_H, (char[]){*command[VALUE_C], '\0'}, TRUE );
+                        if(strcmp(command[VALUE_C], "1") == 0)
+                            set_led(1);
+                        else if(strcmp(command[VALUE_C], "0") == 0)
+                            set_led(0);
 
-                        sprintf(local_buffer, "%s:%c", ack_msg, *command[VALUE_C]);
+                        sprintf(local_buffer, "%s:%s", ack_msg, command[VALUE_C]);
+                        send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
+                        ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
+                    }
+                    else if(strcmp(command[RESOURCE_C], HABILITAR_R) == 0)
+                    {
+                        if(*command[VALUE_C] == '1' || *command[VALUE_C] == '0')
+                        {
+                            write_nvs((char *)nvs_key_H, (char[]){*command[VALUE_C], '\0'}, TRUE );
+
+                            sprintf(local_buffer, "%s:%c", ack_msg, *command[VALUE_C]);
+                            send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
+                            ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
+                        }
+                        else
+                        {
+                            send(*sock_ptr, nack_msg, strlen(nack_msg), 0);
+                            ESP_LOGE(LOCAL_FUNCTION_TAG, "H value invalid: %s. TX: %s", command[VALUE_C], nack_msg);
+                        }
+                    }
+                    else if(strcmp(command[RESOURCE_C], ENCENDER_R) == 0)
+                    {
+                        write_nvs((char *)nvs_key_N, command[VALUE_C], TRUE );
+
+                        temp_32 = (uint32_t)atoi(command[VALUE_C]);
+
+                        sprintf(local_buffer, "%s:%d", ack_msg, (int)temp_32);
+                        send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
+                        ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
+                    }
+                    else if(strcmp(command[RESOURCE_C], APAGAR_R) == 0)
+                    {
+                        write_nvs((char *)nvs_key_F, command[VALUE_C], TRUE );
+
+                        temp_32 = (uint32_t)atoi(command[VALUE_C]);
+
+                        sprintf(local_buffer, "%s:%d", ack_msg, (int)temp_32);
+                        send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
+                        ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
+                    }
+                    else if(strcmp(command[RESOURCE_C], RESET_R) == 0)
+                    {
+                        ESP_LOGW(LOCAL_FUNCTION_TAG, "Reseting in 5 seconds");
+
+                        xTaskCreate(reset_esp_task, "reset_esp_task", 4096, NULL, 3, &reset_esp_handle);
+
+                        send(*sock_ptr, ack_msg, strlen(ack_msg), 0);
+                        ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", ack_msg);
+                    }
+                    else if(strcmp(command[RESOURCE_C], CANCEL_RESTE_R) == 0)
+                    {
+                        ESP_LOGI(LOCAL_FUNCTION_TAG, "Reseting cancelled"); 
+
+                        if(reset_esp_handle != NULL)
+                        {
+                            vTaskDelete(reset_esp_handle);
+                            reset_esp_handle = NULL;
+                        }
+
+                        send(*sock_ptr, ack_msg, strlen(ack_msg), 0);
+                        ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", ack_msg);
+                    }
+                    else
+                    {
+                        send(*sock_ptr, nack_msg, strlen(nack_msg), 0);
+                        ESP_LOGE(LOCAL_FUNCTION_TAG, "TX: %s", nack_msg);
+                    }
+                }
+                else if(strcmp(command[OPERATION_C], READ_O) == 0)
+                {
+                    if(strcmp(command[RESOURCE_C], ADC_R) == 0)
+                    {
+                        adc_value = read_adc_input(CHANNEL_0);
+                        sprintf(local_buffer, "%s:%.2f", ack_msg, adc_value);
+                        send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
+                        ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
+                    }
+                    else if(strcmp(command[RESOURCE_C], HABILITAR_R) == 0)
+                    {
+                        strncpy(local_buffer_2, "NULL", sizeof(local_buffer_2));
+                        read_nvs((char *)nvs_key_H, local_buffer_2, sizeof(local_buffer_2), TRUE);
+
+                        sprintf(local_buffer, "%s:%s", ack_msg, local_buffer_2);
+                        send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
+                        ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
+                    }
+                    else if(strcmp(command[RESOURCE_C], ENCENDER_R) == 0)
+                    {
+                        strncpy(local_buffer_2, "NULL", sizeof(local_buffer_2));
+                        read_nvs((char *)nvs_key_N, local_buffer_2, sizeof(local_buffer_2), TRUE);
+
+                        sprintf(local_buffer, "%s:%s", ack_msg, local_buffer_2);
+                        send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
+                        ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
+                    }
+                    else if(strcmp(command[RESOURCE_C], APAGAR_R) == 0)
+                    {
+                        strncpy(local_buffer_2, "NULL", sizeof(local_buffer_2));
+                        read_nvs((char *)nvs_key_F, local_buffer_2, sizeof(local_buffer_2), TRUE);
+
+                        sprintf(local_buffer, "%s:%s", ack_msg, local_buffer_2);
                         send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
                         ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
                     }
                     else
                     {
                         send(*sock_ptr, nack_msg, strlen(nack_msg), 0);
-                        ESP_LOGE(LOCAL_FUNCTION_TAG, "H value invalid: %s. TX: %s", command[VALUE_C], nack_msg);
+                        ESP_LOGE(LOCAL_FUNCTION_TAG, "TX: %s", nack_msg);
                     }
                 }
-                else if(strcmp(command[RESOURCE_C], ENCENDER_R) == 0)
-                {
-                    write_nvs((char *)nvs_key_N, command[VALUE_C], TRUE );
-
-                    temp_32 = (uint32_t)atoi(command[VALUE_C]);
-
-                    sprintf(local_buffer, "%s:%d", ack_msg, (int)temp_32);
-                    send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
-                    ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
-                }
-                else if(strcmp(command[RESOURCE_C], APAGAR_R) == 0)
-                {
-                    write_nvs((char *)nvs_key_F, command[VALUE_C], TRUE );
-
-                    temp_32 = (uint32_t)atoi(command[VALUE_C]);
-
-                    sprintf(local_buffer, "%s:%d", ack_msg, (int)temp_32);
-                    send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
-                    ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
-                }
                 else
                 {
                     send(*sock_ptr, nack_msg, strlen(nack_msg), 0);
                     ESP_LOGE(LOCAL_FUNCTION_TAG, "TX: %s", nack_msg);
                 }
-            }
-            else if(strcmp(command[OPERATION_C], READ_O) == 0)
-            {
-                if(strcmp(command[RESOURCE_C], ADC_R) == 0)
-                {
-                    adc_value = read_adc_input(CHANNEL_0);
-                    sprintf(local_buffer, "%s:%.2f", ack_msg, adc_value);
-                    send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
-                    ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
-                }
-                else if(strcmp(command[RESOURCE_C], HABILITAR_R) == 0)
-                {
-                    strncpy(local_buffer_2, "NULL", sizeof(local_buffer_2));
-                    read_nvs((char *)nvs_key_H, local_buffer_2, sizeof(local_buffer_2), TRUE);
-
-                    sprintf(local_buffer, "%s:%s", ack_msg, local_buffer_2);
-                    send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
-                    ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
-                }
-                else if(strcmp(command[RESOURCE_C], ENCENDER_R) == 0)
-                {
-                    strncpy(local_buffer_2, "NULL", sizeof(local_buffer_2));
-                    read_nvs((char *)nvs_key_N, local_buffer_2, sizeof(local_buffer_2), TRUE);
-
-                    sprintf(local_buffer, "%s:%s", ack_msg, local_buffer_2);
-                    send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
-                    ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
-                }
-                else if(strcmp(command[RESOURCE_C], APAGAR_R) == 0)
-                {
-                    strncpy(local_buffer_2, "NULL", sizeof(local_buffer_2));
-                    read_nvs((char *)nvs_key_F, local_buffer_2, sizeof(local_buffer_2), TRUE);
-
-                    sprintf(local_buffer, "%s:%s", ack_msg, local_buffer_2);
-                    send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
-                    ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
-                }
-                else
-                {
-                    send(*sock_ptr, nack_msg, strlen(nack_msg), 0);
-                    ESP_LOGE(LOCAL_FUNCTION_TAG, "TX: %s", nack_msg);
-                }
-            }
-            else
-            {
-                send(*sock_ptr, nack_msg, strlen(nack_msg), 0);
-                ESP_LOGE(LOCAL_FUNCTION_TAG, "TX: %s", nack_msg);
             }
         }
         else if(len == 0)
@@ -404,7 +421,7 @@ uint8_t transmit_receive(const char *LOCAL_FUNCTION_TAG, char *tx_buffer, char *
 
     rx_buffer[0] = '\0';
 
-    while(retry_cnt < MAX_ERROR_RECV)
+    while(retry_cnt < MAX_RETRY_RECV)
     {
         len = recv(*sock_ptr, rx_buffer, sizeof(rx_buffer) - 1, 0);
         
@@ -426,7 +443,7 @@ uint8_t transmit_receive(const char *LOCAL_FUNCTION_TAG, char *tx_buffer, char *
             err = errno;
 
             if(err == EAGAIN || err == EWOULDBLOCK)
-                ESP_LOGW(LOCAL_FUNCTION_TAG, "recv() timeout, attempt... (%d/%d)", retry_cnt + 1, MAX_ERROR_RECV);
+                ESP_LOGW(LOCAL_FUNCTION_TAG, "recv() timeout, attempt... (%d/%d)", retry_cnt + 1, MAX_RETRY_RECV);
             else
             {
                 ESP_LOGE(LOCAL_FUNCTION_TAG, "recv() error: %d (%s)", err, strerror(err));
@@ -439,40 +456,6 @@ uint8_t transmit_receive(const char *LOCAL_FUNCTION_TAG, char *tx_buffer, char *
 
     return return_f;
 }
-
-/* DEPRECATED
-esp_err_t login(const char *LOCAL_FUNCTION_TAG, char *tx_buffer, char *rx_buffer, int *sock_ptr)
-{
-    build_command(tx_buffer, "UABC", "a1264598", "L", "\0");
-    if(transmit_receive(LOCAL_FUNCTION_TAG, tx_buffer, rx_buffer, sock_ptr) == ESP_OK)
-    {
-        if(check_ack(LOCAL_FUNCTION_TAG, rx_buffer) == ESP_OK)
-        {
-            ESP_LOGI(LOCAL_FUNCTION_TAG, "Login succesfull");
-            return ESP_OK;
-        }
-        else
-        {
-            ESP_LOGE(LOCAL_FUNCTION_TAG, "Login failed...");
-            return ESP_FAIL;
-        }
-    }
-    else
-        return ESP_FAIL;
-}
-*/
-
-/* DEPRECATED
-esp_err_t send_keep_alive(const char *LOCAL_FUNCTION_TAG, char *tx_buffer, char *rx_buffer, int *sock_ptr)
-{
-    build_command(tx_buffer, "UABC", "a1264598", "K", "\0");
-
-    if(transmit_receive(LOCAL_FUNCTION_TAG, tx_buffer, rx_buffer, sock_ptr) == ESP_OK)
-        return check_ack(LOCAL_FUNCTION_TAG, rx_buffer);
-    else
-        return ESP_FAIL;
-}
-*/
 
 void keep_alive_task(void *pvParameters)
 {
@@ -557,6 +540,15 @@ void seperate_commands(char *rx_buffer, char command[][STR_LEN/2])
         local_ptr++;
     }
     command[counter_cmmd][counter_word] = '\0'; // terminator
+}
+
+void reset_esp_task(void *pvParameters)
+{
+    vTaskDelay(pdMS_TO_TICKS(5000));
+
+    esp_restart();
+
+    vTaskDelete(NULL);
 }
 
 //check connection to google

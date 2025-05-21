@@ -24,10 +24,14 @@
 
 #define STR_LEN 128
 
+#define USER_TCP "a1264598"
+#define ID_TCP "UABC"
+
+
 #define COMMANDS_MAX_QUANTITY 10
 
 #define MAX_ERROR_TCP_LOOP 3
-#define MAX_ERROR_RECV 5
+#define MAX_RETRY_RECV 3
 
 //exit flags
 #define UNDEFINED 0
@@ -48,7 +52,7 @@
 #define SEMAPHORE_MS_WAIT 20
 
 //keep alive
-#define KEEP_ALIVE_MS 10000
+#define KEEP_ALIVE_MS 5000
 
 
 //command parts
@@ -68,6 +72,8 @@
 #define HABILITAR_R "H"
 #define ENCENDER_R "N"
 #define APAGAR_R "F"
+#define RESET_R "I"
+#define CANCEL_RESTE_R "U"
 
 typedef struct 
 {
@@ -94,10 +100,6 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int *sock_ptr, Sema
 
 uint8_t transmit_receive(const char *LOCAL_FUNCTION_TAG, char *tx_buffer, char *rx_buffer, int *sock_ptr);
 
-//esp_err_t login(const char *LOCAL_FUNCTION_TAG, char *tx_buffer, char *rx_buffer, int *sock_ptr);
-
-//esp_err_t send_keep_alive(const char *LOCAL_FUNCTION_TAG, char *tx_buffer, char *rx_buffer, int *sock_ptr);
-
 void keep_alive_task(void *pvParameters);
 
 esp_err_t check_ack(const char *LOCAL_FUNCTION_TAG, char *rx_buffer);
@@ -106,6 +108,8 @@ void build_command(char *string_com, ...);
 
 void seperate_commands(char *rx_buffer, char command[][STR_LEN/2]);
 
+
+void reset_esp_task(void *pvParameters);
 
 esp_err_t check_internet_connection();
 
