@@ -27,8 +27,8 @@
 #define USER_TCP "a1264598"
 #define ID_TCP "UABC"
 
-#define TERMINATION_DELIMITER_CHR '*'
-#define TERMINATION_DELIMITER_STR "*"
+#define TERMINATION_DELIMITER_CHR '\r'
+#define TERMINATION_DELIMITER_STR "\r"
 
 #define COMMANDS_MAX_QUANTITY 10
 
@@ -53,6 +53,8 @@
 #define REMOTE_MS_WAIT 4000
 #define SEMAPHORE_MS_WAIT 20
 
+#define RESET_TIME_S 10
+
 //keep alive
 #define KEEP_ALIVE_MS 10000
 
@@ -74,6 +76,8 @@
 #define HABILITAR_R "H"
 #define ENCENDER_R "N"
 #define APAGAR_R "F"
+#define RESET_R "I"
+#define CANCEL_RESTE_R "U"
 
 typedef struct 
 {
@@ -108,6 +112,8 @@ void build_command(char *string_com, ...);
 
 void seperate_commands(char *rx_buffer, char command[][STR_LEN/2]);
 
+
+void reset_esp_task(void *pvParameters);
 
 esp_err_t check_internet_connection();
 

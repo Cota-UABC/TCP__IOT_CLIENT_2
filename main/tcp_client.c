@@ -35,6 +35,7 @@ void remote_server_task(void *pvParameters)
     int sock;
     struct timeval timeout;
 
+    //if there is an internet connection, connecto to remote, if not connect to local
     while(1)
     {
         ESP_LOGI(TAG_T_REMOTE, "Checking internet connection...");
@@ -91,6 +92,7 @@ void local_server_task(void *pvParameters)
 
     uint8_t return_f = UNDEFINED;
 
+    //connecto to local only if semphore is active.
     while(1)
     {
         ESP_LOGI(TAG_T_LOCAL, "Waiting for activate semaphore...");
@@ -181,6 +183,8 @@ esp_err_t tcp_connect_to_host(const char *LOCAL_FUNCTION_TAG, struct sockaddr_in
 
 uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int *sock_ptr, SemaphoreHandle_t stop_semaphore)
 {    
+    //main comunication loop
+
     char tx_buffer[STR_LEN], rx_buffer[STR_LEN], command[COMMANDS_MAX_QUANTITY][STR_LEN/2], local_buffer[STR_LEN*2], local_buffer_2[STR_LEN/2],
         keep_alive[STR_LEN];
     uint8_t error_counter = 0, return_f, partial_rx_f = 0, close_f=0;
@@ -193,6 +197,7 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int *sock_ptr, Sema
     build_command(keep_alive, ID_TCP, USER_TCP, "K", "\0");
 
     TaskHandle_t keep_alive_handle = NULL;
+    TaskHandle_t reset_esp_handle = NULL;
     SemaphoreHandle_t keep_alive_semaphore;
 
 
@@ -329,6 +334,26 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int *sock_ptr, Sema
 
                         sprintf(local_buffer, "%s:%d", ack_msg, (int)temp_32);
                     }
+                    else if(strcmp(command[RESOURCE_C], RESET_R) == 0)
+                    {
+                        ESP_LOGW(LOCAL_FUNCTION_TAG, "Reseting in %d second(s)", RESET_TIME_S);
+
+                        xTaskCreate(reset_esp_task, "reset_esp_task", 4096, NULL, 3, &reset_esp_handle);
+
+                        sprintf(local_buffer, "%s", ack_msg);
+                    }
+                    else if(strcmp(command[RESOURCE_C], CANCEL_RESTE_R) == 0)
+                    {
+                        ESP_LOGI(LOCAL_FUNCTION_TAG, "Reseting cancelled"); 
+
+                        if(reset_esp_handle != NULL)
+                        {
+                            vTaskDelete(reset_esp_handle);
+                            reset_esp_handle = NULL;
+                        }
+
+                        sprintf(local_buffer, "%s", ack_msg);
+                    }
                     else
                     {
                         sprintf(local_buffer, "%s", nack_msg);
@@ -435,6 +460,7 @@ uint8_t transmit_receive(const char *LOCAL_FUNCTION_TAG, char *tx_buffer, char *
 
     rx_buffer[0] = '\0';
 
+    //wait until recieved full message
     while(retry_cnt < MAX_RETRY_RECV)
     {
         len = recv(*sock_ptr, local_rx_buffer, sizeof(local_rx_buffer) - 1, 0);
@@ -566,6 +592,23 @@ void seperate_commands(char *rx_buffer, char command[][STR_LEN/2])
         local_ptr++;
     }
     command[counter_cmmd][counter_word] = '\0'; // terminator
+}
+
+
+void reset_esp_task(void *pvParameters)
+{
+    uint16_t counter = RESET_TIME_S;
+
+    do
+    {
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        counter--;
+        ESP_LOGW(TAG_T, "Reseting in %d second(s)", counter);
+    }while(counter);
+
+    esp_restart();
+
+    vTaskDelete(NULL);
 }
 
 //check connection to google
