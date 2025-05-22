@@ -259,6 +259,8 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int *sock_ptr, Sema
             {
                 rx_buffer[len] = '\0';
                 strcat(local_buffer, rx_buffer);
+
+                len = strlen(local_buffer);
                 
                 //check terminator delimiter
                 if(local_buffer[len-1] != TERMINATION_DELIMITER_CHR)
@@ -441,6 +443,8 @@ uint8_t transmit_receive(const char *LOCAL_FUNCTION_TAG, char *tx_buffer, char *
         {
             local_rx_buffer[len] = '\0';
             strcat(rx_buffer, local_rx_buffer);
+
+            len = strlen(rx_buffer);
             
             //check termination delimiter
             if(rx_buffer[len-1] != TERMINATION_DELIMITER_CHR)
