@@ -183,17 +183,16 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int *sock_ptr, Sema
 {    
     char tx_buffer[STR_LEN], rx_buffer[STR_LEN], command[COMMANDS_MAX_QUANTITY][STR_LEN/2], local_buffer[STR_LEN*2], local_buffer_2[STR_LEN/2],
         keep_alive[STR_LEN];
-    uint8_t error_counter = 0, return_f;
+    uint8_t error_counter = 0, return_f, partial_rx_f = 0, close_f=0;
     uint32_t temp_32;
     float adc_value = 0;
-    int len;
+    int len, err=0, retry_cnt;
 
     char ack_msg[5] = "ACK";
     char nack_msg[5] = "NACK";
     build_command(keep_alive, ID_TCP, USER_TCP, "K", "\0");
 
     TaskHandle_t keep_alive_handle = NULL;
-    TaskHandle_t reset_esp_handle = NULL;
     SemaphoreHandle_t keep_alive_semaphore;
 
 
@@ -214,7 +213,7 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int *sock_ptr, Sema
     keep_alive_semaphore = xSemaphoreCreateBinary();
     xTaskCreate(keep_alive_task, "keep_alive_task", 4096, (void *)keep_alive_semaphore, 4, &keep_alive_handle);
 
-    while(error_counter < MAX_ERROR_TCP_LOOP)
+    while(!close_f && error_counter < MAX_ERROR_TCP_LOOP)
     {
         //check stop semaphore
         if(stop_semaphore != NULL)
@@ -250,29 +249,53 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int *sock_ptr, Sema
 
         //Check commands
         rx_buffer[0] = '\0';
+        local_buffer[0] = '\0';
 
-        len = recv(*sock_ptr, rx_buffer, sizeof(rx_buffer) - 1, 0);
-        if(len > 0) 
-        {
-            rx_buffer[len] = '\0';
-            ESP_LOGI(LOCAL_FUNCTION_TAG, "RX: %s", rx_buffer);
-
-            seperate_commands(rx_buffer, command);
-
-            if(strcmp(command[ID_C], ID_TCP) == 0 && strcmp(command[USER_C], USER_TCP) == 0)
+        retry_cnt = 0;
+        partial_rx_f = 0;
+        do{
+            len = recv(*sock_ptr, rx_buffer, sizeof(rx_buffer) - 1, 0);
+            if(len > 0) 
             {
-                if(strcmp(command[OPERATION_C], WRITE_O) == 0)
+                rx_buffer[len] = '\0';
+                strcat(local_buffer, rx_buffer);
+                
+                //check terminator delimiter
+                if(local_buffer[len-1] != TERMINATION_DELIMITER_CHR)
+                {
+                    ESP_LOGW(LOCAL_FUNCTION_TAG, "Received partial message: %s", rx_buffer);
+                    partial_rx_f = 1;
+                    continue;
+                }
+                partial_rx_f = 0;
+                
+                //remove termination delimiter
+                local_buffer[len-1] = '\0';
+                ESP_LOGI(LOCAL_FUNCTION_TAG, "RX: %s", local_buffer);
+
+                seperate_commands(local_buffer, command);
+
+                //if WRITE
+                if(strcmp(command[ID_C], ID_TCP) == 0 && strcmp(command[USER_C], USER_TCP) == 0 
+                    && strcmp(command[OPERATION_C], WRITE_O) == 0)
                 {
                     if(strcmp(command[RESOURCE_C], LED_R) == 0)
                     {
                         if(strcmp(command[VALUE_C], "1") == 0)
+                        {
                             set_led(1);
+                            sprintf(local_buffer, "%s:%s", ack_msg, command[VALUE_C]);
+                        }
                         else if(strcmp(command[VALUE_C], "0") == 0)
+                        {
                             set_led(0);
-
-                        sprintf(local_buffer, "%s:%s", ack_msg, command[VALUE_C]);
-                        send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
-                        ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
+                            sprintf(local_buffer, "%s:%s", ack_msg, command[VALUE_C]);
+                        }
+                        else
+                        {
+                            sprintf(local_buffer, "%s", nack_msg);
+                            ESP_LOGE(LOCAL_FUNCTION_TAG, "L value invalid: %s", command[VALUE_C]);
+                        }
                     }
                     else if(strcmp(command[RESOURCE_C], HABILITAR_R) == 0)
                     {
@@ -281,13 +304,11 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int *sock_ptr, Sema
                             write_nvs((char *)nvs_key_H, (char[]){*command[VALUE_C], '\0'}, TRUE );
 
                             sprintf(local_buffer, "%s:%c", ack_msg, *command[VALUE_C]);
-                            send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
-                            ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
                         }
                         else
                         {
-                            send(*sock_ptr, nack_msg, strlen(nack_msg), 0);
-                            ESP_LOGE(LOCAL_FUNCTION_TAG, "H value invalid: %s. TX: %s", command[VALUE_C], nack_msg);
+                            sprintf(local_buffer, "%s", nack_msg);
+                            ESP_LOGE(LOCAL_FUNCTION_TAG, "H value invalid: %s", command[VALUE_C]);
                         }
                     }
                     else if(strcmp(command[RESOURCE_C], ENCENDER_R) == 0)
@@ -297,8 +318,6 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int *sock_ptr, Sema
                         temp_32 = (uint32_t)atoi(command[VALUE_C]);
 
                         sprintf(local_buffer, "%s:%d", ack_msg, (int)temp_32);
-                        send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
-                        ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
                     }
                     else if(strcmp(command[RESOURCE_C], APAGAR_R) == 0)
                     {
@@ -307,45 +326,21 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int *sock_ptr, Sema
                         temp_32 = (uint32_t)atoi(command[VALUE_C]);
 
                         sprintf(local_buffer, "%s:%d", ack_msg, (int)temp_32);
-                        send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
-                        ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
-                    }
-                    else if(strcmp(command[RESOURCE_C], RESET_R) == 0)
-                    {
-                        ESP_LOGW(LOCAL_FUNCTION_TAG, "Reseting in 5 seconds");
-
-                        xTaskCreate(reset_esp_task, "reset_esp_task", 4096, NULL, 3, &reset_esp_handle);
-
-                        send(*sock_ptr, ack_msg, strlen(ack_msg), 0);
-                        ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", ack_msg);
-                    }
-                    else if(strcmp(command[RESOURCE_C], CANCEL_RESTE_R) == 0)
-                    {
-                        ESP_LOGI(LOCAL_FUNCTION_TAG, "Reseting cancelled"); 
-
-                        if(reset_esp_handle != NULL)
-                        {
-                            vTaskDelete(reset_esp_handle);
-                            reset_esp_handle = NULL;
-                        }
-
-                        send(*sock_ptr, ack_msg, strlen(ack_msg), 0);
-                        ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", ack_msg);
                     }
                     else
                     {
-                        send(*sock_ptr, nack_msg, strlen(nack_msg), 0);
-                        ESP_LOGE(LOCAL_FUNCTION_TAG, "TX: %s", nack_msg);
+                        sprintf(local_buffer, "%s", nack_msg);
+                        ESP_LOGE(LOCAL_FUNCTION_TAG, "Invalid resource");
                     }
                 }
-                else if(strcmp(command[OPERATION_C], READ_O) == 0)
+                //if READ
+                else if(strcmp(command[ID_C], ID_TCP) == 0 && strcmp(command[USER_C], USER_TCP) == 0 
+                    && strcmp(command[OPERATION_C], READ_O) == 0)
                 {
                     if(strcmp(command[RESOURCE_C], ADC_R) == 0)
                     {
                         adc_value = read_adc_input(CHANNEL_0);
                         sprintf(local_buffer, "%s:%.2f", ack_msg, adc_value);
-                        send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
-                        ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
                     }
                     else if(strcmp(command[RESOURCE_C], HABILITAR_R) == 0)
                     {
@@ -353,8 +348,6 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int *sock_ptr, Sema
                         read_nvs((char *)nvs_key_H, local_buffer_2, sizeof(local_buffer_2), TRUE);
 
                         sprintf(local_buffer, "%s:%s", ack_msg, local_buffer_2);
-                        send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
-                        ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
                     }
                     else if(strcmp(command[RESOURCE_C], ENCENDER_R) == 0)
                     {
@@ -362,8 +355,6 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int *sock_ptr, Sema
                         read_nvs((char *)nvs_key_N, local_buffer_2, sizeof(local_buffer_2), TRUE);
 
                         sprintf(local_buffer, "%s:%s", ack_msg, local_buffer_2);
-                        send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
-                        ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
                     }
                     else if(strcmp(command[RESOURCE_C], APAGAR_R) == 0)
                     {
@@ -371,31 +362,47 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int *sock_ptr, Sema
                         read_nvs((char *)nvs_key_F, local_buffer_2, sizeof(local_buffer_2), TRUE);
 
                         sprintf(local_buffer, "%s:%s", ack_msg, local_buffer_2);
-                        send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
-                        ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
                     }
                     else
                     {
-                        send(*sock_ptr, nack_msg, strlen(nack_msg), 0);
-                        ESP_LOGE(LOCAL_FUNCTION_TAG, "TX: %s", nack_msg);
+                        sprintf(local_buffer, "%s", nack_msg);
+                        ESP_LOGE(LOCAL_FUNCTION_TAG, "Invalid resource");
                     }
                 }
+                //INVALID
                 else
                 {
-                    send(*sock_ptr, nack_msg, strlen(nack_msg), 0);
-                    ESP_LOGE(LOCAL_FUNCTION_TAG, "TX: %s", nack_msg);
+                    sprintf(local_buffer, "%s", nack_msg);
+                    ESP_LOGE(LOCAL_FUNCTION_TAG, "Invalid command");
+                }
+                
+                //send response
+                ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
+                strcat(local_buffer, TERMINATION_DELIMITER_STR);
+                send(*sock_ptr, local_buffer, strlen(local_buffer), 0);
+            }
+            else if(len == 0)
+            {
+                ESP_LOGE(LOCAL_FUNCTION_TAG, "Connection closed by peer.");
+                return_f = CONNECTION_CLOSED;
+                close_f = 1;
+                break;
+            }
+            else if(partial_rx_f)
+            {
+                err = errno;
+
+                if(err == EAGAIN || err == EWOULDBLOCK)
+                {
+                    ESP_LOGW(LOCAL_FUNCTION_TAG, "recv() timeout, attempt... (%d/%d)", retry_cnt + 1, MAX_RETRY_RECV);
+                    retry_cnt++;
                 }
             }
-        }
-        else if(len == 0)
-        {
-            ESP_LOGE(LOCAL_FUNCTION_TAG, "Connection closed by peer.");
-            return_f = CONNECTION_CLOSED;
-            break;
-        }
+        } while(partial_rx_f && retry_cnt < MAX_RETRY_RECV);
 
         vTaskDelay(pdMS_TO_TICKS(10));
     }
+
 
     if(error_counter >= MAX_ERROR_TCP_LOOP)
     {
@@ -415,19 +422,34 @@ uint8_t transmit_receive(const char *LOCAL_FUNCTION_TAG, char *tx_buffer, char *
 {
     int len, err;
     uint8_t return_f = UNDEFINED, retry_cnt = 0;
+    char local_rx_buffer[STR_LEN/2];
 
-    send(*sock_ptr, tx_buffer, strlen(tx_buffer), 0);
     ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", tx_buffer);
+    strcat(tx_buffer, TERMINATION_DELIMITER_STR);
+    send(*sock_ptr, tx_buffer, strlen(tx_buffer), 0);
+
+    len = strlen(tx_buffer);
+    tx_buffer[len-1] = '\0';
 
     rx_buffer[0] = '\0';
 
     while(retry_cnt < MAX_RETRY_RECV)
     {
-        len = recv(*sock_ptr, rx_buffer, sizeof(rx_buffer) - 1, 0);
+        len = recv(*sock_ptr, local_rx_buffer, sizeof(local_rx_buffer) - 1, 0);
         
         if(len > 0) 
         {
-            rx_buffer[len] = '\0';
+            local_rx_buffer[len] = '\0';
+            strcat(rx_buffer, local_rx_buffer);
+            
+            //check termination delimiter
+            if(rx_buffer[len-1] != TERMINATION_DELIMITER_CHR)
+            {
+                ESP_LOGW(LOCAL_FUNCTION_TAG, "Received partial message: %s", local_rx_buffer);
+                continue;
+            }
+
+            rx_buffer[len-1] = '\0';
             ESP_LOGI(LOCAL_FUNCTION_TAG, "RX: %s", rx_buffer);
             return_f = COMMUNICATION_OK;
             break;
@@ -540,15 +562,6 @@ void seperate_commands(char *rx_buffer, char command[][STR_LEN/2])
         local_ptr++;
     }
     command[counter_cmmd][counter_word] = '\0'; // terminator
-}
-
-void reset_esp_task(void *pvParameters)
-{
-    vTaskDelay(pdMS_TO_TICKS(5000));
-
-    esp_restart();
-
-    vTaskDelete(NULL);
 }
 
 //check connection to google
