@@ -258,6 +258,7 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int *sock_ptr, Sema
 
         retry_cnt = 0;
         partial_rx_f = 0;
+        //wait until received full message
         do{
             len = recv(*sock_ptr, rx_buffer, sizeof(rx_buffer) - 1, 0);
             if(len > 0) 

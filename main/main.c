@@ -13,15 +13,15 @@
 const char *TAG = "MAIN";
 
 //wifi credentials
-//#define SSID "Totalplay-2.4G-b518"
-//#define PASS "Qxm2EAzh99Ce7Lfk"
-#define SSID "COTA_PC"
-#define PASS "0402{V8z"
+#define SSID "Totalplay-2.4G-b518"
+#define PASS "Qxm2EAzh99Ce7Lfk"
+//#define SSID "COTA_PC"
+//#define PASS "0402{V8z"
 //#define SSID "IoT_AP"
 //#define PASS "12345678"
 
 //tcp host and port
-#define REMOTE_IP_ADDR "192.168.137.182" 
+#define REMOTE_IP_ADDR "192.168.100.26" 
 #define REMOTE_PORT 8250
 
 #define LOCAL_IP_ADDR "192.168.100.182" 
