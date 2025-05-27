@@ -7,7 +7,6 @@ void tcp_client_main(char *host, int port, char *local_host, int local_port)
 {
     task_tcp_params_t *tcp_params = malloc(sizeof(task_tcp_params_t));
 
-
     //tcp parameters
     strncpy(tcp_params->host, host, sizeof(tcp_params->host)); 
     tcp_params->port = port;
@@ -16,11 +15,12 @@ void tcp_client_main(char *host, int port, char *local_host, int local_port)
     tcp_params->activate_semaphore = xSemaphoreCreateBinary();
     tcp_params->stop_semaphore = xSemaphoreCreateBinary();
 
-    //create tcp task
+    //create remote tcp task
     xTaskCreate(remote_server_task, "remote_server_task", 4096, (void *)tcp_params, 4, NULL);
 
     vTaskDelay(pdMS_TO_TICKS(1000));
 
+    //create local tcp task
     xTaskCreate(local_server_task, "local_server_task", 4096, (void *)tcp_params, 4, NULL);
 
 }
@@ -42,6 +42,7 @@ void remote_server_task(void *pvParameters)
         while(check_internet_connection() == ESP_FAIL)
         {
             ESP_LOGE(TAG_T_REMOTE, "No internet connection detected...");
+            //activate local tcp socket
             xSemaphoreGive(params->activate_semaphore);
             xSemaphoreTake(params->stop_semaphore, pdMS_TO_TICKS(10));
 
@@ -54,16 +55,20 @@ void remote_server_task(void *pvParameters)
         if(tcp_connect_to_host(NULL, &dest_addr, &sock, params->host, params->port) == ESP_FAIL)
         {
             ESP_LOGE(TAG_T_REMOTE, "Could not connect to remote server...");
+            //activate local tcp socket
             xSemaphoreGive(params->activate_semaphore);
             xSemaphoreTake(params->stop_semaphore, pdMS_TO_TICKS(10));
+
             vTaskDelay(pdMS_TO_TICKS(REMOTE_MS_WAIT));
             shutdown(sock, 0);
             continue;
         }
 
+        //deactivate local tcp socket
         xSemaphoreGive(params->stop_semaphore);
         xSemaphoreTake(params->activate_semaphore, pdMS_TO_TICKS(10));
 
+        //do main communication loop
         tcp_communicate_loop(TAG_T_REMOTE, &sock, NULL);
 
         shutdown(sock, 0);
@@ -101,6 +106,7 @@ void local_server_task(void *pvParameters)
             ESP_LOGI(TAG_T_LOCAL, "Ativate semaphore taken...");
             while(1)
             {
+                //if stops semaphore active, break
                 if(xSemaphoreTake(params->stop_semaphore, pdMS_TO_TICKS(SEMAPHORE_MS_WAIT)) == pdTRUE)
                     {ESP_LOGW(TAG_T_LOCAL, "Stop semaphore taken...");
                     break;}
@@ -110,12 +116,14 @@ void local_server_task(void *pvParameters)
                 if(tcp_connect_to_host(TAG_T_LOCAL, &dest_addr, &sock, params->local_host, params->local_port) == ESP_FAIL)
                 {
                     ESP_LOGE(TAG_T_LOCAL, "Could not connect to server...");
-                    vTaskDelay(pdMS_TO_TICKS(2000));
+                    vTaskDelay(pdMS_TO_TICKS(LOCAL_MS_WAIT));
                     continue;
                 }
                 else
                 {
+                    //do main communication loop
                     return_f = tcp_communicate_loop(TAG_T_LOCAL, &sock, params->stop_semaphore);
+                    //if stop semaphore taken, break
                     if(return_f == STOP_SEMAPHORE)
                         break;
                 }
@@ -194,7 +202,6 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int *sock_ptr, Sema
 
     char ack_msg[5] = "ACK";
     char nack_msg[5] = "NACK";
-    build_command(keep_alive, ID_TCP, USER_TCP, "K", "\0");
 
     TaskHandle_t keep_alive_handle = NULL;
     TaskHandle_t reset_esp_handle = NULL;
@@ -214,13 +221,19 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int *sock_ptr, Sema
     }
     return_f = UNDEFINED;
 
+
     //keep alive
     keep_alive_semaphore = xSemaphoreCreateBinary();
+
+    build_command(keep_alive, ID_TCP, USER_TCP, "K", "\0");
+
+    //create send keep alive task
     xTaskCreate(keep_alive_task, "keep_alive_task", 4096, (void *)keep_alive_semaphore, 4, &keep_alive_handle);
+
 
     while(!close_f && error_counter < MAX_ERROR_TCP_LOOP)
     {
-        //check stop semaphore
+        //close socket if stop semaphore active
         if(stop_semaphore != NULL)
         {
             if(xSemaphoreTake(stop_semaphore, pdMS_TO_TICKS(SEMAPHORE_MS_WAIT)) == pdTRUE)
@@ -231,13 +244,13 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int *sock_ptr, Sema
             }
         }
 
-        //if time to send keep alive
+        //if keep alive semaphore active, send keep alive
         if(xSemaphoreTake(keep_alive_semaphore, pdMS_TO_TICKS(SEMAPHORE_MS_WAIT)) == pdTRUE)
         {
             return_f = transmit_receive(LOCAL_FUNCTION_TAG, keep_alive, rx_buffer, sock_ptr);
 
             if(return_f == CONNECTION_CLOSED)
-                return return_f;
+                break;
             else if(return_f == COMMUNICATION_OK)
             {
                 if(check_ack(LOCAL_FUNCTION_TAG, rx_buffer) == ESP_FAIL)
@@ -448,6 +461,8 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int *sock_ptr, Sema
 
 uint8_t transmit_receive(const char *LOCAL_FUNCTION_TAG, char *tx_buffer, char *rx_buffer, int *sock_ptr)
 {
+    //transmit and receive a message through a socket
+
     int len, err;
     uint8_t return_f = UNDEFINED, retry_cnt = 0;
     char local_rx_buffer[STR_LEN/2];

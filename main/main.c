@@ -27,6 +27,8 @@ const char *TAG = "MAIN";
 #define LOCAL_IP_ADDR "192.168.100.182" 
 #define LOCAL_PORT 8250
 
+#define RESET_TIME 7000
+
 void app_main(void)
 {
     init_gpio();
@@ -36,7 +38,7 @@ void app_main(void)
     if(wifi_connect(SSID, PASS) == ESP_FAIL)
     {
         ESP_LOGE(TAG, "Could not connect to wifi, restarting...");
-        vTaskDelay(pdMS_TO_TICKS(7000));
+        vTaskDelay(pdMS_TO_TICKS(RESET_TIME));
         esp_restart();
     }
    

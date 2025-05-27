@@ -24,9 +24,6 @@
 
 #define STR_LEN 128
 
-#define USER_TCP "a1264598"
-#define ID_TCP "UABC"
-
 #define TERMINATION_DELIMITER_CHR '\r'
 #define TERMINATION_DELIMITER_STR "\r"
 
@@ -51,6 +48,7 @@
 //client wait time
 #define SOCKET_TIMEOUT_SEC 1
 #define REMOTE_MS_WAIT 4000
+#define LOCAL_MS_WAIT 2000
 #define SEMAPHORE_MS_WAIT 20
 
 #define RESET_TIME_S 10
@@ -65,6 +63,9 @@
 #define OPERATION_C 2
 #define RESOURCE_C 3
 #define VALUE_C 4
+
+#define ID_TCP "UABC"
+#define USER_TCP "a1264598"
 
 //operations
 #define WRITE_O "W"
