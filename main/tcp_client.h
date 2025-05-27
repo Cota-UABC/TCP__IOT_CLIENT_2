@@ -29,6 +29,7 @@
 
 #define COMMANDS_MAX_QUANTITY 10
 
+//max errors
 #define MAX_ERROR_TCP_LOOP 3
 #define MAX_RETRY_RECV 4
 
@@ -42,15 +43,17 @@
 #define TRUE 1
 #define FALSE 2
 
-#define HOST_GOOGLE "142.250.188.14" //Google
+//Google host
+#define HOST_GOOGLE "142.250.188.14" 
 #define PORT_GOOGLE 80
 
 //client wait time
 #define SOCKET_TIMEOUT_SEC 1
 #define REMOTE_MS_WAIT 4000
-#define LOCAL_MS_WAIT 2000
+#define LOCAL_MS_WAIT 1000
 #define SEMAPHORE_MS_WAIT 20
 
+//restart
 #define RESET_TIME_S 10
 
 //keep alive
@@ -99,11 +102,11 @@ void local_server_task(void *pvParameters);
 
 void tcp_create_socket(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, struct timeval *timeout_ptr, char *host, int port);
 
-esp_err_t tcp_connect_to_host(const char *LOCAL_FUNCTION_TAG, struct sockaddr_in *dest_addr_ptr, int *sock_ptr, char *host, int port);
+esp_err_t tcp_connect_to_host(const char *LOCAL_FUNCTION_TAG, struct sockaddr_in *dest_addr_ptr, int sock, char *host, int port);
 
-uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int *sock_ptr, SemaphoreHandle_t stop_semaphore);
+uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int sock, SemaphoreHandle_t stop_semaphore);
 
-uint8_t transmit_receive(const char *LOCAL_FUNCTION_TAG, char *tx_buffer, char *rx_buffer, int *sock_ptr);
+uint8_t transmit_receive(const char *LOCAL_FUNCTION_TAG, char *tx_buffer, char *rx_buffer, int sock);
 
 void keep_alive_task(void *pvParameters);
 
