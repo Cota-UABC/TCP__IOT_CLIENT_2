@@ -95,7 +95,7 @@ void clock_task(void *pvParameters)
             if(clock_seconds >= 86400)
                 clock_seconds = 0;
 
-            if(clock_seconds % 30 == 0)
+            if(clock_seconds % SECOND_TO_PRINT == 0)
                 ESP_LOGW(TAG_CLK, "%d:%d:%d -> %d minutes", (int)clock_seconds / 3600, ((int)clock_seconds % 3600) / 60, (int)clock_seconds % 60, (int)clock_seconds/60);
             
             xSemaphoreGive(seconds_mutex);

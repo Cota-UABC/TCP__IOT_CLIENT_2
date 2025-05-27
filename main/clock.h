@@ -32,6 +32,8 @@
 #define NTP_HOST "132.248.30.3"
 #define NTP_PORT 123
 
+#define SECOND_TO_PRINT 30
+
 extern SemaphoreHandle_t seconds_mutex;
 extern uint32_t clock_seconds;
 

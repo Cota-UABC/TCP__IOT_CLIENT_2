@@ -48,7 +48,7 @@ void remote_server_task(void *pvParameters)
 
             vTaskDelay(pdMS_TO_TICKS(REMOTE_MS_WAIT));   
         }
-        ESP_LOGI(TAG_T_REMOTE, "Internet connection detected, conecting to remote server...");
+        ESP_LOGI(TAG_T_REMOTE, "Internet connection detected, conecting to remote server: %s:%d...", params->host, params->port);
 
         tcp_create_socket(&dest_addr, &sock, &timeout, params->host, params->port);
         

@@ -35,6 +35,7 @@ void app_main(void)
     adc_init();
     ESP_ERROR_CHECK(init_nvs());
 
+    //wait for wifi connection, if fail restart
     if(wifi_connect(SSID, PASS) == ESP_FAIL)
     {
         ESP_LOGE(TAG, "Could not connect to wifi, restarting...");
@@ -42,10 +43,13 @@ void app_main(void)
         esp_restart();
     }
    
+    //start internal clock
     start_clock();
 
+    //start tcp client
     tcp_client_main(REMOTE_IP_ADDR, REMOTE_PORT, LOCAL_IP_ADDR, LOCAL_PORT);
 
+    //start led timer task
     xTaskCreate(led_timer_task, "led_timer_task", 4096, NULL, 3, NULL);
     
     while(1)
