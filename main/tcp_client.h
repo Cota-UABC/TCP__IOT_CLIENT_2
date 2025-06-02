@@ -116,6 +116,10 @@ void build_command(char *string_com, ...);
 
 void seperate_commands(char *rx_buffer, char command[][STR_LEN/2]);
 
+void decode_string(char *str);
+
+void code_string(char *str);
+
 
 void reset_esp_task(void *pvParameters);
 

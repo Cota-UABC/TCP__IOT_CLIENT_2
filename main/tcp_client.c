@@ -192,8 +192,8 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int sock, Semaphore
 {    
     //main comunication loop
 
-    char tx_buffer[STR_LEN], rx_buffer[STR_LEN], command[COMMANDS_MAX_QUANTITY][STR_LEN/2], local_buffer[STR_LEN*2], local_buffer_2[STR_LEN/2],
-        keep_alive[STR_LEN];
+    char tx_buffer[STR_LEN], rx_buffer[STR_LEN], rx_buffer_decoded[STR_LEN], command[COMMANDS_MAX_QUANTITY][STR_LEN/2], 
+        local_buffer[STR_LEN*2], local_buffer_2[STR_LEN/2];
     uint8_t error_counter = 0, return_f, partial_rx_f = 0, close_f=0;
     uint32_t temp_32;
     float adc_value = 0;
@@ -224,8 +224,6 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int sock, Semaphore
     //keep alive
     keep_alive_semaphore = xSemaphoreCreateBinary();
 
-    build_command(keep_alive, ID_TCP, USER_TCP, "K", "\0");
-
     //create send keep alive task
     xTaskCreate(keep_alive_task, "keep_alive_task", 4096, (void *)keep_alive_semaphore, 4, &keep_alive_handle);
 
@@ -246,7 +244,9 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int sock, Semaphore
         //if keep alive semaphore active, send keep alive
         if(xSemaphoreTake(keep_alive_semaphore, pdMS_TO_TICKS(SEMAPHORE_MS_WAIT)) == pdTRUE)
         {
-            return_f = transmit_receive(LOCAL_FUNCTION_TAG, keep_alive, rx_buffer, sock);
+            
+            build_command(tx_buffer, ID_TCP, USER_TCP, "K", "\0");
+            return_f = transmit_receive(LOCAL_FUNCTION_TAG, tx_buffer, rx_buffer, sock);
 
             if(return_f == CONNECTION_CLOSED)
                 break;
@@ -276,6 +276,10 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int sock, Semaphore
             if(len > 0) 
             {
                 rx_buffer[len] = '\0';
+
+                //decode
+                decode_string(rx_buffer);
+
                 strcat(local_buffer, rx_buffer);
 
                 len = strlen(local_buffer);
@@ -419,6 +423,9 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int sock, Semaphore
                 //send response
                 ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
                 strcat(local_buffer, TERMINATION_DELIMITER_STR);
+
+                //code
+                code_string(local_buffer);
                 send(sock, local_buffer, strlen(local_buffer), 0);
             }
             else if(len == 0)
@@ -468,10 +475,10 @@ uint8_t transmit_receive(const char *LOCAL_FUNCTION_TAG, char *tx_buffer, char *
 
     ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", tx_buffer);
     strcat(tx_buffer, TERMINATION_DELIMITER_STR);
-    send(sock, tx_buffer, strlen(tx_buffer), 0);
 
-    len = strlen(tx_buffer);
-    tx_buffer[len-1] = '\0';
+    //code
+    code_string(tx_buffer);
+    send(sock, tx_buffer, strlen(tx_buffer), 0);
 
     rx_buffer[0] = '\0';
 
@@ -483,6 +490,10 @@ uint8_t transmit_receive(const char *LOCAL_FUNCTION_TAG, char *tx_buffer, char *
         if(len > 0) 
         {
             local_rx_buffer[len] = '\0';
+
+            //decode
+            decode_string(local_rx_buffer);
+
             strcat(rx_buffer, local_rx_buffer);
 
             len = strlen(rx_buffer);
@@ -607,6 +618,45 @@ void seperate_commands(char *rx_buffer, char command[][STR_LEN/2])
         local_ptr++;
     }
     command[counter_cmmd][counter_word] = '\0'; // terminator
+}
+
+void decode_string(char *str)
+{
+    char buffer_decoded[STR_LEN] = {0};
+
+    for(int i=0; i<strlen(str); i=i+2)
+    {
+        int len = strlen(buffer_decoded);  
+
+        buffer_decoded[len] = (((uint8_t)str[i] << 1) & 0xAA) | (((uint8_t)str[i+1] >> 1) & 0x55); 
+
+        buffer_decoded[len + 1] = '\0';
+    }
+
+    //printf("Original: %s\n", str);
+    //printf("Decoded: %s\n", buffer_decoded);
+
+    strcpy(str, buffer_decoded);
+}
+
+void code_string(char *str)
+{
+    char buffer_coded[STR_LEN] = {0};
+
+    for(int i=0; i<strlen(str); i++)
+    {
+        int len = strlen(buffer_coded);  
+    
+        buffer_coded[len] = (((uint8_t)str[i] & 0xAA) >> 1) | ((~((uint8_t)str[i] & 0xAA)) & 0xAA);
+        buffer_coded[len + 1] = (((uint8_t)str[i] & 0x55) << 1) | ((~((uint8_t)str[i] & 0x55)) & 0x55);
+
+        buffer_coded[len + 2] = '\0';
+    }
+    
+    //printf("Original: %s\n", str);
+    //printf("Coded: %s\n", buffer_coded);
+
+    strcpy(str, buffer_coded);
 }
 
 
