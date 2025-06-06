@@ -21,7 +21,7 @@ void tcp_client_main(char *host, int port, char *local_host, int local_port)
     vTaskDelay(pdMS_TO_TICKS(1000));
 
     //create local tcp task
-    xTaskCreate(local_server_task, "local_server_task", 4096, (void *)tcp_params, 4, NULL);
+    //xTaskCreate(local_server_task, "local_server_task", 4096, (void *)tcp_params, 4, NULL);
 
 }
 
@@ -38,6 +38,8 @@ void remote_server_task(void *pvParameters)
     //if there is an internet connection, connecto to remote, if not connect to local
     while(1)
     {
+        vTaskDelay(pdMS_TO_TICKS(10000));
+
         ESP_LOGI(TAG_T_REMOTE, "Checking internet connection...");
         while(check_internet_connection() == ESP_FAIL)
         {
@@ -192,12 +194,10 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int sock, Semaphore
 {    
     //main comunication loop
 
-    char tx_buffer[STR_LEN], rx_buffer[STR_LEN], rx_buffer_decoded[STR_LEN], command[COMMANDS_MAX_QUANTITY][STR_LEN/2], 
-        local_buffer[STR_LEN*2], local_buffer_2[STR_LEN/2];
-    uint8_t error_counter = 0, return_f, partial_rx_f = 0, close_f=0;
+    char tx_buffer[STR_LEN], rx_buffer[STR_LEN], command[COMMANDS_MAX_QUANTITY][STR_LEN/2], local_buffer[STR_LEN*2], local_buffer_2[STR_LEN/2];
+    uint8_t error_counter = 0, return_f;
     uint32_t temp_32;
     float adc_value = 0;
-    int len, err=0, retry_cnt;
 
     char ack_msg[5] = "ACK";
     char nack_msg[5] = "NACK";
@@ -210,7 +210,11 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int sock, Semaphore
     //send login
     build_command(tx_buffer, ID_TCP, USER_TCP, "L", "\0");
 
-    return_f = transmit_receive(LOCAL_FUNCTION_TAG, tx_buffer, rx_buffer, sock);
+    //DEPRECATED
+    //return_f = transmit_receive(LOCAL_FUNCTION_TAG, tx_buffer, rx_buffer, sock);
+    transmit_data(LOCAL_FUNCTION_TAG, sock, tx_buffer);
+
+    return_f = receive_data(LOCAL_FUNCTION_TAG, sock, rx_buffer, sizeof(rx_buffer));
     if(return_f == COMMUNICATION_OK && check_ack(LOCAL_FUNCTION_TAG, rx_buffer) == ESP_OK)
         ESP_LOGI(LOCAL_FUNCTION_TAG, "Login succesfull");
     else
@@ -221,15 +225,158 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int sock, Semaphore
     return_f = UNDEFINED;
 
 
-    //keep alive
+    //keep alive handle
     keep_alive_semaphore = xSemaphoreCreateBinary();
 
     //create send keep alive task
     xTaskCreate(keep_alive_task, "keep_alive_task", 4096, (void *)keep_alive_semaphore, 4, &keep_alive_handle);
 
 
-    while(!close_f && error_counter < MAX_ERROR_TCP_LOOP)
+    //comunicate loop
+    while(error_counter < MAX_ERROR_TCP_LOOP)
     {
+        //rx data
+        return_f = receive_data(LOCAL_FUNCTION_TAG, sock, rx_buffer, sizeof(rx_buffer));
+
+        if(return_f == COMMUNICATION_OK)
+        {
+            //Check commands
+            seperate_commands(rx_buffer, command);
+            
+            //if WRITE
+            if(strcmp(command[ID_C], ID_TCP) == 0 && strcmp(command[USER_C], USER_TCP) == 0 
+                && strcmp(command[OPERATION_C], WRITE_O) == 0)
+            {
+                if(strcmp(command[RESOURCE_C], LED_R) == 0)
+                {
+                    if(strcmp(command[VALUE_C], "1") == 0)
+                    {
+                        set_led(1);
+                        sprintf(tx_buffer, "%s:%s", ack_msg, command[VALUE_C]);
+                    }
+                    else if(strcmp(command[VALUE_C], "0") == 0)
+                    {
+                        set_led(0);
+                        sprintf(tx_buffer, "%s:%s", ack_msg, command[VALUE_C]);
+                    }
+                    else
+                    {
+                        sprintf(tx_buffer, "%s", nack_msg);
+                        ESP_LOGE(LOCAL_FUNCTION_TAG, "L value invalid: %s", command[VALUE_C]);
+                    }
+                }
+                else if(strcmp(command[RESOURCE_C], HABILITAR_R) == 0)
+                {
+                    if(*command[VALUE_C] == '1' || *command[VALUE_C] == '0')
+                    {
+                        write_nvs((char *)nvs_key_H, (char[]){*command[VALUE_C], '\0'}, TRUE );
+
+                        sprintf(tx_buffer, "%s:%c", ack_msg, *command[VALUE_C]);
+                    }
+                    else
+                    {
+                        sprintf(tx_buffer, "%s", nack_msg);
+                        ESP_LOGE(LOCAL_FUNCTION_TAG, "H value invalid: %s", command[VALUE_C]);
+                    }
+                }
+                else if(strcmp(command[RESOURCE_C], ENCENDER_R) == 0)
+                {
+                    write_nvs((char *)nvs_key_N, command[VALUE_C], TRUE );
+
+                    temp_32 = (uint32_t)atoi(command[VALUE_C]);
+
+                    sprintf(tx_buffer, "%s:%d", ack_msg, (int)temp_32);
+                }
+                else if(strcmp(command[RESOURCE_C], APAGAR_R) == 0)
+                {
+                    write_nvs((char *)nvs_key_F, command[VALUE_C], TRUE );
+
+                    temp_32 = (uint32_t)atoi(command[VALUE_C]);
+
+                    sprintf(tx_buffer, "%s:%d", ack_msg, (int)temp_32);
+                }
+                else if(strcmp(command[RESOURCE_C], RESET_R) == 0)
+                {
+                    ESP_LOGW(LOCAL_FUNCTION_TAG, "Reseting in %d second(s)", RESET_TIME_S);
+
+                    xTaskCreate(reset_esp_task, "reset_esp_task", 4096, NULL, 4, &reset_esp_handle);
+
+                    sprintf(tx_buffer, "%s", ack_msg);
+                }
+                else if(strcmp(command[RESOURCE_C], CANCEL_RESET_R) == 0)
+                {
+                    ESP_LOGI(LOCAL_FUNCTION_TAG, "Reseting cancelled"); 
+
+                    if(reset_esp_handle != NULL)
+                    {
+                        vTaskDelete(reset_esp_handle);
+                        reset_esp_handle = NULL;
+                    }
+
+                    sprintf(tx_buffer, "%s", ack_msg);
+                }
+                else
+                {
+                    sprintf(tx_buffer, "%s", nack_msg);
+                    ESP_LOGE(LOCAL_FUNCTION_TAG, "Invalid resource");
+                }
+            }
+            //if READ
+            else if(strcmp(command[ID_C], ID_TCP) == 0 && strcmp(command[USER_C], USER_TCP) == 0 
+                && strcmp(command[OPERATION_C], READ_O) == 0)
+            {
+                if(strcmp(command[RESOURCE_C], LED_R) == 0)
+                {
+                    sprintf(tx_buffer, "%s:0", ack_msg);
+                }
+                else if(strcmp(command[RESOURCE_C], ADC_R) == 0)
+                {
+                    adc_value = read_adc_input(CHANNEL_0);
+                    sprintf(tx_buffer, "%s:%.2f", ack_msg, adc_value);
+                }
+                else if(strcmp(command[RESOURCE_C], HABILITAR_R) == 0)
+                {
+                    strncpy(local_buffer_2, "NULL", sizeof(local_buffer_2));
+                    read_nvs((char *)nvs_key_H, local_buffer_2, sizeof(local_buffer_2), TRUE);
+
+                    sprintf(tx_buffer, "%s:%s", ack_msg, local_buffer_2);
+                }
+                else if(strcmp(command[RESOURCE_C], ENCENDER_R) == 0)
+                {
+                    strncpy(local_buffer_2, "NULL", sizeof(local_buffer_2));
+                    read_nvs((char *)nvs_key_N, local_buffer_2, sizeof(local_buffer_2), TRUE);
+
+                    sprintf(tx_buffer, "%s:%s", ack_msg, local_buffer_2);
+                }
+                else if(strcmp(command[RESOURCE_C], APAGAR_R) == 0)
+                {
+                    strncpy(local_buffer_2, "NULL", sizeof(local_buffer_2));
+                    read_nvs((char *)nvs_key_F, local_buffer_2, sizeof(local_buffer_2), TRUE);
+
+                    sprintf(tx_buffer, "%s:%s", ack_msg, local_buffer_2);
+                }
+                else
+                {
+                    sprintf(tx_buffer, "%s", nack_msg);
+                    ESP_LOGE(LOCAL_FUNCTION_TAG, "Invalid resource");
+                }
+            }
+            //INVALID
+            else
+            {
+                //sprintf(tx_buffer, "%s", nack_msg);
+                ESP_LOGE(LOCAL_FUNCTION_TAG, "Invalid command");
+                goto exit;
+            }
+            
+            transmit_data(LOCAL_FUNCTION_TAG, sock, tx_buffer);
+exit:
+        }
+        else if(return_f == CONNECTION_TIMEOUT)
+            error_counter++;
+        else if(return_f == CONNECTION_CLOSED)
+           break;
+
         //close socket if stop semaphore active
         if(stop_semaphore != NULL)
         {
@@ -246,11 +393,16 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int sock, Semaphore
         {
             
             build_command(tx_buffer, ID_TCP, USER_TCP, "K", "\0");
-            return_f = transmit_receive(LOCAL_FUNCTION_TAG, tx_buffer, rx_buffer, sock);
+            //DEPRECATED
+            //return_f = transmit_receive(LOCAL_FUNCTION_TAG, tx_buffer, rx_buffer, sock);
+
+            transmit_data(LOCAL_FUNCTION_TAG, sock, tx_buffer);
+            return_f = receive_data(LOCAL_FUNCTION_TAG, sock, rx_buffer, sizeof(rx_buffer));
 
             if(return_f == CONNECTION_CLOSED)
                 break;
-            else if(return_f == COMMUNICATION_OK)
+
+            if(return_f == COMMUNICATION_OK)
             {
                 if(check_ack(LOCAL_FUNCTION_TAG, rx_buffer) == ESP_FAIL)
                     error_counter++;
@@ -264,192 +416,8 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int sock, Semaphore
             return_f = UNDEFINED;
         }
 
-        //Check commands
-        rx_buffer[0] = '\0';
-        local_buffer[0] = '\0';
-
-        retry_cnt = 0;
-        partial_rx_f = 0;
-        //wait until received full message
-        do{
-            len = recv(sock, rx_buffer, sizeof(rx_buffer) - 1, 0);
-            if(len > 0) 
-            {
-                rx_buffer[len] = '\0';
-
-                //decode
-                decode_string(rx_buffer);
-
-                strcat(local_buffer, rx_buffer);
-
-                len = strlen(local_buffer);
-                
-                //check terminator delimiter
-                if(local_buffer[len-1] != TERMINATION_DELIMITER_CHR)
-                {
-                    ESP_LOGW(LOCAL_FUNCTION_TAG, "Received partial message: %s", rx_buffer);
-                    partial_rx_f = 1;
-                    continue;
-                }
-                partial_rx_f = 0;
-                
-                //remove termination delimiter
-                local_buffer[len-1] = '\0';
-                ESP_LOGI(LOCAL_FUNCTION_TAG, "RX: %s", local_buffer);
-
-                seperate_commands(local_buffer, command);
-
-                //if WRITE
-                if(strcmp(command[ID_C], ID_TCP) == 0 && strcmp(command[USER_C], USER_TCP) == 0 
-                    && strcmp(command[OPERATION_C], WRITE_O) == 0)
-                {
-                    if(strcmp(command[RESOURCE_C], LED_R) == 0)
-                    {
-                        if(strcmp(command[VALUE_C], "1") == 0)
-                        {
-                            set_led(1);
-                            sprintf(local_buffer, "%s:%s", ack_msg, command[VALUE_C]);
-                        }
-                        else if(strcmp(command[VALUE_C], "0") == 0)
-                        {
-                            set_led(0);
-                            sprintf(local_buffer, "%s:%s", ack_msg, command[VALUE_C]);
-                        }
-                        else
-                        {
-                            sprintf(local_buffer, "%s", nack_msg);
-                            ESP_LOGE(LOCAL_FUNCTION_TAG, "L value invalid: %s", command[VALUE_C]);
-                        }
-                    }
-                    else if(strcmp(command[RESOURCE_C], HABILITAR_R) == 0)
-                    {
-                        if(*command[VALUE_C] == '1' || *command[VALUE_C] == '0')
-                        {
-                            write_nvs((char *)nvs_key_H, (char[]){*command[VALUE_C], '\0'}, TRUE );
-
-                            sprintf(local_buffer, "%s:%c", ack_msg, *command[VALUE_C]);
-                        }
-                        else
-                        {
-                            sprintf(local_buffer, "%s", nack_msg);
-                            ESP_LOGE(LOCAL_FUNCTION_TAG, "H value invalid: %s", command[VALUE_C]);
-                        }
-                    }
-                    else if(strcmp(command[RESOURCE_C], ENCENDER_R) == 0)
-                    {
-                        write_nvs((char *)nvs_key_N, command[VALUE_C], TRUE );
-
-                        temp_32 = (uint32_t)atoi(command[VALUE_C]);
-
-                        sprintf(local_buffer, "%s:%d", ack_msg, (int)temp_32);
-                    }
-                    else if(strcmp(command[RESOURCE_C], APAGAR_R) == 0)
-                    {
-                        write_nvs((char *)nvs_key_F, command[VALUE_C], TRUE );
-
-                        temp_32 = (uint32_t)atoi(command[VALUE_C]);
-
-                        sprintf(local_buffer, "%s:%d", ack_msg, (int)temp_32);
-                    }
-                    else if(strcmp(command[RESOURCE_C], RESET_R) == 0)
-                    {
-                        ESP_LOGW(LOCAL_FUNCTION_TAG, "Reseting in %d second(s)", RESET_TIME_S);
-
-                        xTaskCreate(reset_esp_task, "reset_esp_task", 4096, NULL, 4, &reset_esp_handle);
-
-                        sprintf(local_buffer, "%s", ack_msg);
-                    }
-                    else if(strcmp(command[RESOURCE_C], CANCEL_RESTE_R) == 0)
-                    {
-                        ESP_LOGI(LOCAL_FUNCTION_TAG, "Reseting cancelled"); 
-
-                        if(reset_esp_handle != NULL)
-                        {
-                            vTaskDelete(reset_esp_handle);
-                            reset_esp_handle = NULL;
-                        }
-
-                        sprintf(local_buffer, "%s", ack_msg);
-                    }
-                    else
-                    {
-                        sprintf(local_buffer, "%s", nack_msg);
-                        ESP_LOGE(LOCAL_FUNCTION_TAG, "Invalid resource");
-                    }
-                }
-                //if READ
-                else if(strcmp(command[ID_C], ID_TCP) == 0 && strcmp(command[USER_C], USER_TCP) == 0 
-                    && strcmp(command[OPERATION_C], READ_O) == 0)
-                {
-                    if(strcmp(command[RESOURCE_C], ADC_R) == 0)
-                    {
-                        adc_value = read_adc_input(CHANNEL_0);
-                        sprintf(local_buffer, "%s:%.2f", ack_msg, adc_value);
-                    }
-                    else if(strcmp(command[RESOURCE_C], HABILITAR_R) == 0)
-                    {
-                        strncpy(local_buffer_2, "NULL", sizeof(local_buffer_2));
-                        read_nvs((char *)nvs_key_H, local_buffer_2, sizeof(local_buffer_2), TRUE);
-
-                        sprintf(local_buffer, "%s:%s", ack_msg, local_buffer_2);
-                    }
-                    else if(strcmp(command[RESOURCE_C], ENCENDER_R) == 0)
-                    {
-                        strncpy(local_buffer_2, "NULL", sizeof(local_buffer_2));
-                        read_nvs((char *)nvs_key_N, local_buffer_2, sizeof(local_buffer_2), TRUE);
-
-                        sprintf(local_buffer, "%s:%s", ack_msg, local_buffer_2);
-                    }
-                    else if(strcmp(command[RESOURCE_C], APAGAR_R) == 0)
-                    {
-                        strncpy(local_buffer_2, "NULL", sizeof(local_buffer_2));
-                        read_nvs((char *)nvs_key_F, local_buffer_2, sizeof(local_buffer_2), TRUE);
-
-                        sprintf(local_buffer, "%s:%s", ack_msg, local_buffer_2);
-                    }
-                    else
-                    {
-                        sprintf(local_buffer, "%s", nack_msg);
-                        ESP_LOGE(LOCAL_FUNCTION_TAG, "Invalid resource");
-                    }
-                }
-                //INVALID
-                else
-                {
-                    sprintf(local_buffer, "%s", nack_msg);
-                    ESP_LOGE(LOCAL_FUNCTION_TAG, "Invalid command");
-                }
-                
-                //send response
-                ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", local_buffer);
-                strcat(local_buffer, TERMINATION_DELIMITER_STR);
-
-                //code
-                code_string(local_buffer);
-                send(sock, local_buffer, strlen(local_buffer), 0);
-            }
-            else if(len == 0)
-            {
-                ESP_LOGE(LOCAL_FUNCTION_TAG, "Connection closed by peer.");
-                return_f = CONNECTION_CLOSED;
-                close_f = 1;
-                break;
-            }
-            else if(partial_rx_f)
-            {
-                err = errno;
-
-                if(err == EAGAIN || err == EWOULDBLOCK)
-                {
-                    ESP_LOGW(LOCAL_FUNCTION_TAG, "recv() timeout, attempt... (%d/%d)", retry_cnt + 1, MAX_RETRY_RECV);
-                    retry_cnt++;
-                }
-            }
-        } while(partial_rx_f && retry_cnt < MAX_RETRY_RECV);
-
         vTaskDelay(pdMS_TO_TICKS(10));
     }
-
 
     if(error_counter >= MAX_ERROR_TCP_LOOP)
     {
@@ -465,6 +433,93 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int sock, Semaphore
     return return_f;
 }
 
+uint8_t receive_data(const char *LOCAL_FUNCTION_TAG, int sock, char *rx_buffer, size_t buffer_size)
+{
+    char local_buffer[STR_LEN] = {0};
+    int len, err = 0;
+    uint8_t retry_cnt = 0, partial_rx_f = 0,return_f = UNDEFINED;
+    
+    rx_buffer[0] = '\0';
+
+    //do while partial message and it has not received termination delimiter
+    do{
+        len = recv(sock, local_buffer, buffer_size - 1, 0);
+        if(len > 0) 
+        {
+            local_buffer[len] = '\0';
+
+            //decode
+            //decode_string(local_buffer);
+
+            strcat(rx_buffer, local_buffer);
+
+            len = strlen(rx_buffer);
+                        
+            //check terminator delimiter
+            if(rx_buffer[len-1] != TERMINATION_DELIMITER_CHR)
+            {
+                ESP_LOGW(LOCAL_FUNCTION_TAG, "Received partial message: %s", local_buffer);
+                partial_rx_f = 1;
+                continue;
+            }
+            partial_rx_f = 0;
+            
+            ESP_LOGI(LOCAL_FUNCTION_TAG, "RX LEN: %d", strlen(rx_buffer));
+            for (int i = 0; i<strlen(rx_buffer); i++) {
+                printf("%02X ", (unsigned char)rx_buffer[i]);
+            }
+            printf("\n");
+        
+            //remove termination delimiter
+            rx_buffer[len-1] = '\0';
+            ESP_LOGI(LOCAL_FUNCTION_TAG, "RX: %s", rx_buffer);
+
+
+            return_f = COMMUNICATION_OK;
+            break;
+        }
+        else if(len == 0)
+        {
+            ESP_LOGE(LOCAL_FUNCTION_TAG, "Connection closed by peer.");
+            return_f = CONNECTION_CLOSED;
+            break;
+        }
+        else if(partial_rx_f)
+        {
+            err = errno;
+
+            if(err == EAGAIN || err == EWOULDBLOCK)
+            {
+                ESP_LOGW(LOCAL_FUNCTION_TAG, "recv() timeout, attempt... (%d/%d)", retry_cnt + 1, MAX_RETRY_RECV);
+                retry_cnt++;
+            }
+        }
+    } while(partial_rx_f && retry_cnt <= MAX_RETRY_RECV);
+
+    if(retry_cnt >= MAX_RETRY_RECV)
+        return_f = CONNECTION_TIMEOUT;
+
+    return return_f;
+}
+
+void transmit_data(const char *LOCAL_FUNCTION_TAG, int sock, char *tx_buffer)
+{
+    ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", tx_buffer);
+    //strcat(tx_buffer, TERMINATION_DELIMITER_STR);
+
+    //encode
+    //code_string(tx_buffer);
+    
+    ESP_LOGI(LOCAL_FUNCTION_TAG, "TX LEN: %d", strlen(tx_buffer));
+    for (int i = 0; i<strlen(tx_buffer); i++) {
+        printf("%02X ", (unsigned char)tx_buffer[i]);
+    }
+    printf("\n");
+
+    send(sock, tx_buffer, strlen(tx_buffer), 0);
+}
+
+//DEPRECATED
 uint8_t transmit_receive(const char *LOCAL_FUNCTION_TAG, char *tx_buffer, char *rx_buffer, int sock)
 {
     //transmit and receive a message through a socket
@@ -497,6 +552,11 @@ uint8_t transmit_receive(const char *LOCAL_FUNCTION_TAG, char *tx_buffer, char *
             strcat(rx_buffer, local_rx_buffer);
 
             len = strlen(rx_buffer);
+            ESP_LOGI(LOCAL_FUNCTION_TAG, "OLD LEN: %d", len);
+            for (int i = 0; i<len; i++) {
+                printf("%02X ", (unsigned char)rx_buffer[i]);
+            }
+            printf("\n");
             
             //check termination delimiter
             if(rx_buffer[len-1] != TERMINATION_DELIMITER_CHR)

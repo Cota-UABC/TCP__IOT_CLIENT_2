@@ -35,9 +35,10 @@
 
 //exit flags
 #define UNDEFINED 0
-#define COMMUNICATION_OK 2
-#define COMMUNICATION_FAIL 3
-#define CONNECTION_CLOSED 4
+#define COMMUNICATION_OK 1
+#define COMMUNICATION_FAIL 2
+#define CONNECTION_CLOSED 3
+#define CONNECTION_TIMEOUT 4
 #define STOP_SEMAPHORE 5
 
 #define TRUE 1
@@ -81,7 +82,7 @@
 #define ENCENDER_R "N"
 #define APAGAR_R "F"
 #define RESET_R "I"
-#define CANCEL_RESTE_R "U"
+#define CANCEL_RESET_R "U"
 
 typedef struct 
 {
@@ -103,6 +104,10 @@ void local_server_task(void *pvParameters);
 void tcp_create_socket(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, struct timeval *timeout_ptr, char *host, int port);
 
 esp_err_t tcp_connect_to_host(const char *LOCAL_FUNCTION_TAG, struct sockaddr_in *dest_addr_ptr, int sock, char *host, int port);
+
+uint8_t receive_data(const char *LOCAL_FUNCTION_TAG, int sock, char *rx_buffer, size_t buffer_size);
+
+void transmit_data(const char *LOCAL_FUNCTION_TAG, int sock, char *tx_buffer);
 
 uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int sock, SemaphoreHandle_t stop_semaphore);
 

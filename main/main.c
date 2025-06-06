@@ -21,7 +21,8 @@ const char *TAG = "MAIN";
 #define PASS "Qxm2EAzh99Ce7Lfk"
 
 //tcp host and port
-#define REMOTE_IP_ADDR "192.168.100.13" 
+//#define REMOTE_IP_ADDR "192.168.100.13" 
+#define REMOTE_IP_ADDR "82.180.173.228" 
 #define REMOTE_PORT 8250
 
 #define LOCAL_IP_ADDR "192.168.100.182" 
