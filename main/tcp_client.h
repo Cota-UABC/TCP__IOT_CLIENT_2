@@ -49,6 +49,7 @@
 #define PORT_GOOGLE 80
 
 //client wait time
+#define CONNECT_WAIT_S 10
 #define SOCKET_TIMEOUT_SEC 1
 #define REMOTE_MS_WAIT 4000
 #define LOCAL_MS_WAIT 1000

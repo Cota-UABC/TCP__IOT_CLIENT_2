@@ -38,7 +38,11 @@ void remote_server_task(void *pvParameters)
     //if there is an internet connection, connecto to remote, if not connect to local
     while(1)
     {
-        vTaskDelay(pdMS_TO_TICKS(10000));
+        for(int i=0; i<CONNECT_WAIT_S; i++)
+        {
+            ESP_LOGW(TAG_T_REMOTE, "Connecting in %d seconds...", CONNECT_WAIT_S-i);
+            vTaskDelay(pdMS_TO_TICKS(1000));
+        }
 
         ESP_LOGI(TAG_T_REMOTE, "Checking internet connection...");
         while(check_internet_connection() == ESP_FAIL)
@@ -364,9 +368,12 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int sock, Semaphore
             //INVALID
             else
             {
-                //sprintf(tx_buffer, "%s", nack_msg);
+                //avoid infinte back and forth
+                if(strcmp(rx_buffer, "NACK") == 0)
+                    goto exit;
+
+                sprintf(tx_buffer, "%s", nack_msg);
                 ESP_LOGE(LOCAL_FUNCTION_TAG, "Invalid command");
-                goto exit;
             }
             
             transmit_data(LOCAL_FUNCTION_TAG, sock, tx_buffer);
@@ -509,7 +516,7 @@ void transmit_data(const char *LOCAL_FUNCTION_TAG, int sock, char *tx_buffer)
 
     //encode
     //code_string(tx_buffer);
-    
+
     ESP_LOGI(LOCAL_FUNCTION_TAG, "TX LEN: %d", strlen(tx_buffer));
     for (int i = 0; i<strlen(tx_buffer); i++) {
         printf("%02X ", (unsigned char)tx_buffer[i]);
