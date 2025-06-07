@@ -49,7 +49,7 @@
 #define PORT_GOOGLE 80
 
 //client wait time
-#define CONNECT_WAIT_S 10
+#define CONNECT_WAIT_S 5
 #define SOCKET_TIMEOUT_SEC 1
 #define REMOTE_MS_WAIT 4000
 #define LOCAL_MS_WAIT 1000
@@ -106,17 +106,16 @@ void tcp_create_socket(struct sockaddr_in *dest_addr_ptr, int *sock_ptr, struct 
 
 esp_err_t tcp_connect_to_host(const char *LOCAL_FUNCTION_TAG, struct sockaddr_in *dest_addr_ptr, int sock, char *host, int port);
 
+uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int sock, SemaphoreHandle_t stop_semaphore);
+
 uint8_t receive_data(const char *LOCAL_FUNCTION_TAG, int sock, char *rx_buffer, size_t buffer_size);
 
 void transmit_data(const char *LOCAL_FUNCTION_TAG, int sock, char *tx_buffer);
 
-uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int sock, SemaphoreHandle_t stop_semaphore);
+void keep_alive_notification_task(void *pvParameters);
 
-uint8_t transmit_receive(const char *LOCAL_FUNCTION_TAG, char *tx_buffer, char *rx_buffer, int sock);
-
-void keep_alive_task(void *pvParameters);
-
-esp_err_t check_ack(const char *LOCAL_FUNCTION_TAG, char *rx_buffer);
+//DEPRECTAED
+//esp_err_t check_ack(const char *LOCAL_FUNCTION_TAG, char *rx_buffer);
 
 void build_command(char *string_com, ...);
 
@@ -124,7 +123,7 @@ void seperate_commands(char *rx_buffer, char command[][STR_LEN/2]);
 
 void decode_string(char *str);
 
-void code_string(char *str);
+void encode_string(char *str);
 
 
 void reset_esp_task(void *pvParameters);
