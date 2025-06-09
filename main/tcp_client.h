@@ -21,6 +21,8 @@
 #include "nvs_esp.h"
 #include "clock.h"
 #include "led_timer.h"
+#include "string_to_uint8.h"
+#include "pwm.h"
 
 #define STR_LEN 128
 
@@ -79,6 +81,7 @@
 //resources
 #define LED_R "L"
 #define ADC_R "A"
+#define PWM_R "P"
 #define HABILITAR_R "H"
 #define ENCENDER_R "N"
 #define APAGAR_R "F"
@@ -113,9 +116,6 @@ uint8_t receive_data(const char *LOCAL_FUNCTION_TAG, int sock, char *rx_buffer, 
 void transmit_data(const char *LOCAL_FUNCTION_TAG, int sock, char *tx_buffer);
 
 void keep_alive_notification_task(void *pvParameters);
-
-//DEPRECTAED
-//esp_err_t check_ack(const char *LOCAL_FUNCTION_TAG, char *rx_buffer);
 
 void build_command(char *string_com, ...);
 

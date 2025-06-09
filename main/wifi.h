@@ -25,7 +25,7 @@
 #define IP_LENGHT 50
 
 extern const char *TAG_W;
-extern uint8_t connected_w, ip_flag;
+extern uint8_t connected_state;
 
 extern esp_netif_ip_info_t ip_info;
 

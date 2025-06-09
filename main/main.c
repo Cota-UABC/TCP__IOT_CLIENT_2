@@ -13,12 +13,12 @@
 const char *TAG = "MAIN";
 
 //wifi credentials
-#define SSID "COTA_PC"
-#define PASS "0402{V8z"
+//#define SSID "COTA_PC"
+//#define PASS "0402{V8z"
 //#define SSID "IoT_AP"
 //#define PASS "12345678"
-//#define SSID "Totalplay-2.4G-b518"
-//#define PASS "Qxm2EAzh99Ce7Lfk"
+#define SSID "Totalplay-2.4G-b518"
+#define PASS "Qxm2EAzh99Ce7Lfk"
 
 //tcp host and port
 //#define REMOTE_IP_ADDR "192.168.100.13" 
@@ -34,6 +34,7 @@ void app_main(void)
 {
     init_gpio();
     adc_init();
+    ledc_init();
     ESP_ERROR_CHECK(init_nvs());
 
     //wait for wifi connection, if fail restart

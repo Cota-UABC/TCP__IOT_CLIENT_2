@@ -15,6 +15,8 @@ extern volatile uint8_t l_state, b_state, b_state_old, edge;
 
 void init_gpio(void);
 
+int get_led_state();
+
 void set_led(uint8_t state);
 
 #endif 

@@ -21,6 +21,11 @@ uint32_t get_real_time()
         return seconds;
     }
 
+    struct timeval timeout;
+    timeout.tv_sec = 5; 
+    timeout.tv_usec = 0; 
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+
     struct sockaddr_in server_addr = 
     {
         .sin_family = AF_INET,
@@ -31,6 +36,7 @@ uint32_t get_real_time()
     ntp_packet[0] = 0b11100011;
 
     sendto(sock, ntp_packet, sizeof(ntp_packet), 0,(struct sockaddr *)&server_addr, sizeof(server_addr));
+
 
     struct sockaddr_in from_addr;
     socklen_t from_len = sizeof(from_addr);
@@ -73,17 +79,21 @@ void start_clock()
 {
     seconds_mutex = xSemaphoreCreateMutex();
 
-    if(xSemaphoreTake(seconds_mutex, portMAX_DELAY))
+    if(xSemaphoreTake(seconds_mutex, pdMS_TO_TICKS(CLOCK_WAIT_TIME_MS)) == pdTRUE)
     {
         clock_seconds = get_real_time();  
         xSemaphoreGive(seconds_mutex);
     }
+    else
+        ESP_LOGE(TAG_CLK, "Could not get real time - Mutex error");
 
     xTaskCreate(clock_task, "clock_task", 4096, NULL, 4, NULL);
 }
 
 void clock_task(void *pvParameters)
 {
+    ESP_LOGI(TAG_CLK, "Clock started");
+
     while(1)
     {
         vTaskDelay(pdMS_TO_TICKS(1000));

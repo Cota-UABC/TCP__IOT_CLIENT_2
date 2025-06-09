@@ -200,9 +200,9 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int sock, Semaphore
     //main comunication loop
 
     char tx_buffer[STR_LEN], rx_buffer[STR_LEN], command[COMMANDS_MAX_QUANTITY][STR_LEN/2], local_buffer[STR_LEN/2];
-    uint8_t error_counter = 0, return_f = UNDEFINED, keep_alive_f = 0;
+    uint8_t error_counter = 0, return_f = UNDEFINED, keep_alive_f = 0, pwm_value;
     uint32_t temp_32;
-    float adc_value = 0;
+    int adc_value;
 
     char ack_msg[5] = "ACK";
     char nack_msg[5] = "NACK";
@@ -275,6 +275,20 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int sock, Semaphore
                         ESP_LOGE(LOCAL_FUNCTION_TAG, "L value invalid: %s", command[VALUE_C]);
                     }
                 }
+                else if(strcmp(command[RESOURCE_C], PWM_R) == 0)
+                {
+                    if(string_to_uint8(command[VALUE_C], &pwm_value) == ESP_OK && pwm_value <= 100)
+                    {
+                        ledc_set_duty(LEDC_HIGH_SPEED_MODE, LEDC_CHANNEL_0, (uint32_t)(pwm_value)); 
+                        ledc_update_duty(LEDC_HIGH_SPEED_MODE, LEDC_CHANNEL_0);
+                        sprintf(tx_buffer, "%s:%u", ack_msg, pwm_value);
+                    }
+                    else
+                    {
+                        ESP_LOGE(TAG_T, "Pwm VALUE invalid: %s", command[VALUE_C]);
+                        sprintf(tx_buffer, "%s", nack_msg);
+                    }
+                }
                 else if(strcmp(command[RESOURCE_C], HABILITAR_R) == 0)
                 {
                     if(*command[VALUE_C] == '1' || *command[VALUE_C] == '0')
@@ -337,12 +351,17 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int sock, Semaphore
             {
                 if(strcmp(command[RESOURCE_C], LED_R) == 0)
                 {
-                    sprintf(tx_buffer, "%s:0", ack_msg);
+                    sprintf(tx_buffer, "%s:%d", ack_msg, get_led_state());
+                }
+                else if(strcmp(command[RESOURCE_C], PWM_R) == 0)
+                {
+                    uint32_t value_pwm = ledc_get_duty(LEDC_HIGH_SPEED_MODE, LEDC_CHANNEL_0);
+                    sprintf(tx_buffer, "ACK:%" PRIu32 "", value_pwm);
                 }
                 else if(strcmp(command[RESOURCE_C], ADC_R) == 0)
                 {
                     adc_value = read_adc_input(CHANNEL_0);
-                    sprintf(tx_buffer, "%s:%.2f", ack_msg, adc_value);
+                    sprintf(tx_buffer, "%s:%d", ack_msg, adc_value);
                 }
                 else if(strcmp(command[RESOURCE_C], HABILITAR_R) == 0)
                 {
@@ -560,22 +579,6 @@ void keep_alive_notification_task(void *pvParameters)
 
     vTaskDelete(NULL);
 }
-//DEPRECTAED
-/*
-esp_err_t check_ack(const char *LOCAL_FUNCTION_TAG, char *rx_buffer)
-{
-    if(strcmp(rx_buffer, "ACK") != 0)
-    {
-        ESP_LOGE(LOCAL_FUNCTION_TAG, "Acknowledge not received...");
-        return ESP_FAIL;
-    }
-    else
-    {
-        ESP_LOGI(LOCAL_FUNCTION_TAG, "Acknowledge received");
-        return ESP_OK;
-    }
-}
-*/
 
 void build_command(char *string_com, ...)
 {
