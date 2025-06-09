@@ -35,6 +35,13 @@
 #define MAX_ERROR_TCP_LOOP 3
 #define MAX_RETRY_RECV 4
 
+//client wait time
+#define CONNECT_WAIT_S 5
+#define SOCKET_TIMEOUT_SEC 1
+#define REMOTE_MS_WAIT 4000
+#define LOCAL_MS_WAIT 1000
+#define SEMAPHORE_MS_WAIT 20
+
 //exit flags
 #define UNDEFINED 0
 #define COMMUNICATION_OK 1
@@ -49,13 +56,6 @@
 //Google host
 #define HOST_GOOGLE "142.250.188.14" 
 #define PORT_GOOGLE 80
-
-//client wait time
-#define CONNECT_WAIT_S 5
-#define SOCKET_TIMEOUT_SEC 1
-#define REMOTE_MS_WAIT 4000
-#define LOCAL_MS_WAIT 1000
-#define SEMAPHORE_MS_WAIT 20
 
 //restart
 #define RESET_TIME_S 10

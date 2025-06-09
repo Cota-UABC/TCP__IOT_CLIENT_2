@@ -21,7 +21,7 @@ void tcp_client_main(char *host, int port, char *local_host, int local_port)
     vTaskDelay(pdMS_TO_TICKS(1000));
 
     //create local tcp task
-    //xTaskCreate(local_server_task, "local_server_task", 4096, (void *)tcp_params, 4, NULL);
+    xTaskCreate(local_server_task, "local_server_task", 4096, (void *)tcp_params, 4, NULL);
 
 }
 
@@ -39,11 +39,9 @@ void remote_server_task(void *pvParameters)
     while(1)
     {
         //wait connect again
-        for(int i=0; i<CONNECT_WAIT_S; i++)
-        {
-            ESP_LOGW(TAG_T_REMOTE, "Connecting in %d seconds...", CONNECT_WAIT_S-i);
-            vTaskDelay(pdMS_TO_TICKS(1000));
-        }
+        ESP_LOGW(TAG_T_REMOTE, "Connecting in %d seconds...", CONNECT_WAIT_S);
+        vTaskDelay(pdMS_TO_TICKS(CONNECT_WAIT_S * 1000));
+
 
         ESP_LOGI(TAG_T_REMOTE, "Checking internet connection...");
         while(check_internet_connection() == ESP_FAIL)
@@ -722,7 +720,8 @@ void reset_esp_task(void *pvParameters)
 
         vTaskDelay(pdMS_TO_TICKS(2000));
     }
-    
+
+    ESP_LOGW(TAG_T, "Closing socket");
     shutdown(params->sock, 0);
     close(params->sock);
     esp_restart();
