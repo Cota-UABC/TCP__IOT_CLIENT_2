@@ -44,7 +44,7 @@
 #define STOP_SEMAPHORE 5
 
 #define TRUE 1
-#define FALSE 2
+#define FALSE 0
 
 //Google host
 #define HOST_GOOGLE "142.250.188.14" 
@@ -86,6 +86,7 @@
 #define ENCENDER_R "N"
 #define APAGAR_R "F"
 #define RESET_R "I"
+#define FACTORY_RESET_R "X"
 #define CANCEL_RESET_R "U"
 
 typedef struct 
@@ -97,6 +98,12 @@ typedef struct
     SemaphoreHandle_t activate_semaphore;
     SemaphoreHandle_t stop_semaphore;
 } task_tcp_params_t;
+
+typedef struct 
+{
+    uint8_t flush_nvs_f;
+    int sock;
+} reset_params_t;
 
 void tcp_client_main(char *host, int port, char *local_host, int local_port);
 

@@ -11,11 +11,11 @@
 
 #define LED GPIO_NUM_2
 
-extern volatile uint8_t l_state, b_state, b_state_old, edge;
+extern volatile uint8_t l_state;
 
 void init_gpio(void);
 
-int get_led_state();
+uint8_t get_led_state();
 
 void set_led(uint8_t state);
 

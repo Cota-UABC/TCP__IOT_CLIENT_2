@@ -195,9 +195,9 @@ esp_err_t tcp_connect_to_host(const char *LOCAL_FUNCTION_TAG, struct sockaddr_in
     return ESP_OK;
 }
 
+//main comunication loop
 uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int sock, SemaphoreHandle_t stop_semaphore)
 {    
-    //main comunication loop
 
     char tx_buffer[STR_LEN], rx_buffer[STR_LEN], command[COMMANDS_MAX_QUANTITY][STR_LEN/2], local_buffer[STR_LEN/2];
     uint8_t error_counter = 0, return_f = UNDEFINED, keep_alive_f = 0, pwm_value;
@@ -210,7 +210,10 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int sock, Semaphore
     TaskHandle_t keep_alive_handle = NULL;
     TaskHandle_t reset_esp_handle = NULL;
     SemaphoreHandle_t keep_alive_semaphore;
+    
+    reset_params_t reset_params;
 
+    reset_params.sock = sock;
 
     //send login
     build_command(tx_buffer, ID_TCP, USER_TCP, "L", "login", "\0");
@@ -321,21 +324,40 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int sock, Semaphore
                 }
                 else if(strcmp(command[RESOURCE_C], RESET_R) == 0)
                 {
-                    ESP_LOGW(LOCAL_FUNCTION_TAG, "Reseting in %d second(s)", RESET_TIME_S);
+                    if(reset_esp_handle == NULL)
+                    {
+                        reset_params.flush_nvs_f = FALSE;
+                        ESP_LOGW(LOCAL_FUNCTION_TAG, "Reseting in %d second(s)", RESET_TIME_S);
+                        xTaskCreate(reset_esp_task, "reset_esp_task", 4096, &reset_params, 4, &reset_esp_handle);
+                    }
+                    else
+                        ESP_LOGE(LOCAL_FUNCTION_TAG, "Reset task already started");
 
-                    xTaskCreate(reset_esp_task, "reset_esp_task", 4096, NULL, 4, &reset_esp_handle);
+                    sprintf(tx_buffer, "%s", ack_msg);
+                }
+                else if(strcmp(command[RESOURCE_C], FACTORY_RESET_R) == 0)
+                {
+                    if(reset_esp_handle == NULL)
+                    {
+                        reset_params.flush_nvs_f = TRUE;
+                        ESP_LOGW(LOCAL_FUNCTION_TAG, "Reseting in %d second(s)", RESET_TIME_S);
+                        xTaskCreate(reset_esp_task, "reset_esp_task", 4096, &reset_params, 4, &reset_esp_handle);
+                    }
+                    else
+                        ESP_LOGE(LOCAL_FUNCTION_TAG, "Reset task already started");
 
                     sprintf(tx_buffer, "%s", ack_msg);
                 }
                 else if(strcmp(command[RESOURCE_C], CANCEL_RESET_R) == 0)
                 {
-                    ESP_LOGW(LOCAL_FUNCTION_TAG, "Reset cancelled"); 
-
                     if(reset_esp_handle != NULL)
                     {
+                        ESP_LOGW(LOCAL_FUNCTION_TAG, "Reset cancelled"); 
                         vTaskDelete(reset_esp_handle);
                         reset_esp_handle = NULL;
                     }
+                    else
+                        ESP_LOGE(LOCAL_FUNCTION_TAG, "Reset task has not been started"); 
 
                     sprintf(tx_buffer, "%s", ack_msg);
                 }
@@ -679,7 +701,9 @@ void encode_string(char *str)
 
 void reset_esp_task(void *pvParameters)
 {
+    reset_params_t *params = (reset_params_t *)pvParameters;
     uint16_t counter = RESET_TIME_S;
+    esp_err_t err;
 
     do
     {
@@ -688,6 +712,19 @@ void reset_esp_task(void *pvParameters)
         ESP_LOGW(TAG_T, "Reseting in %d second(s)", counter);
     }while(counter);
 
+    if(params->flush_nvs_f)
+    {
+        err = nvs_flash_erase(); 
+        if (err == ESP_OK) 
+            ESP_LOGW(TAG_T, "NVS values erased...\n");
+        else 
+            ESP_LOGE(TAG_T, "Error erasing NVS: %s\n", esp_err_to_name(err));
+
+        vTaskDelay(pdMS_TO_TICKS(2000));
+    }
+    
+    shutdown(params->sock, 0);
+    close(params->sock);
     esp_restart();
 
     vTaskDelete(NULL);

@@ -8,9 +8,9 @@ void init_gpio(void)
     gpio_set_level(LED, 0);
 }
 
-int get_led_state()
+uint8_t get_led_state()
 {
-    return gpio_get_level(LED);
+    return l_state;
 }
 
 void set_led(uint8_t state)
