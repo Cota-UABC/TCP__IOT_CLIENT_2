@@ -7,7 +7,7 @@
 #include "nvs.h"
 #include "nvs_flash.h"
 
-extern char *TAG_NVS, *key_ssid, *key_pass, *key_dev_name, *key_user, *key_dev_num, *key_iot_key;
+extern char *TAG_NVS;
 
 esp_err_t init_nvs();
 

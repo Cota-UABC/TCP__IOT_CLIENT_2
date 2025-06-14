@@ -36,7 +36,7 @@
 #define MAX_RETRY_RECV 4
 
 //client wait time
-#define CONNECT_WAIT_S 5
+#define CONNECT_WAIT_S 3
 #define SOCKET_TIMEOUT_SEC 1
 #define REMOTE_MS_WAIT 4000
 #define LOCAL_MS_WAIT 1000
@@ -58,10 +58,10 @@
 #define PORT_GOOGLE 80
 
 //restart
-#define RESET_TIME_S 10
+#define RESET_TIME_DEFAULT_S 10
 
 //keep alive
-#define KEEP_ALIVE_MS 10000
+#define INITIAL_KEEP_ALIVE_MS 10000
 
 
 //command parts
@@ -88,6 +88,7 @@
 #define RESET_R "I"
 #define FACTORY_RESET_R "X"
 #define CANCEL_RESET_R "U"
+#define KEY_R "Y"
 
 typedef struct 
 {
@@ -103,7 +104,16 @@ typedef struct
 {
     uint8_t flush_nvs_f;
     int sock;
+    uint8_t seconds_to_reset;
 } reset_params_t;
+
+typedef struct 
+{
+    SemaphoreHandle_t keep_alive_semaphore;
+    int wait_time_s;
+} keep_alive_params_t;
+
+extern char *nvs_key_Y;
 
 void tcp_client_main(char *host, int port, char *local_host, int local_port);
 
@@ -131,6 +141,8 @@ void seperate_commands(char *rx_buffer, char command[][STR_LEN/2]);
 void decode_string(char *str);
 
 void encode_string(char *str);
+
+void key_xor_data(char *data);
 
 
 void reset_esp_task(void *pvParameters);

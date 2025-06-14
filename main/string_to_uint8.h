@@ -12,4 +12,6 @@
 
 esp_err_t string_to_uint8(char *str, uint8_t *result);
 
+esp_err_t string_to_uint16(char *str, uint16_t *result);
+
 #endif

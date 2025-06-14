@@ -2,6 +2,7 @@
 
 static const char *TAG_T = "tcp_client", *TAG_T_REMOTE = "tcp_remote_client", *TAG_T_LOCAL = "tcp_local_client";
 
+char *nvs_key_Y = "Llave";
 
 void tcp_client_main(char *host, int port, char *local_host, int local_port) 
 {
@@ -198,7 +199,8 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int sock, Semaphore
 {    
 
     char tx_buffer[STR_LEN], rx_buffer[STR_LEN], command[COMMANDS_MAX_QUANTITY][STR_LEN/2], local_buffer[STR_LEN/2];
-    uint8_t error_counter = 0, return_f = UNDEFINED, keep_alive_f = 0, pwm_value;
+    uint8_t error_counter = 0, return_f = UNDEFINED, keep_alive_f = 0, pwm_value, temp;
+    uint16_t temp_16;
     uint32_t temp_32;
     int adc_value;
 
@@ -210,11 +212,13 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int sock, Semaphore
     SemaphoreHandle_t keep_alive_semaphore;
     
     reset_params_t reset_params;
-
+    keep_alive_params_t keep_alive_params;
+ 
     reset_params.sock = sock;
+    reset_params.seconds_to_reset = 0;
 
     //send login
-    build_command(tx_buffer, ID_TCP, USER_TCP, "L", "login", "\0");
+    build_command(tx_buffer, ID_TCP, USER_TCP, "L", "S", "login", "\0");
 
     transmit_data(LOCAL_FUNCTION_TAG, sock, tx_buffer);
 
@@ -231,8 +235,11 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int sock, Semaphore
     //keep alive handle
     keep_alive_semaphore = xSemaphoreCreateBinary();
 
+    keep_alive_params.keep_alive_semaphore = keep_alive_semaphore;
+    keep_alive_params.wait_time_s = INITIAL_KEEP_ALIVE_MS;
+
     //create keep alive notification task
-    xTaskCreate(keep_alive_notification_task, "keep_alive_notification_task", 4096, (void *)keep_alive_semaphore, 4, &keep_alive_handle);
+    xTaskCreate(keep_alive_notification_task, "keep_alive_notification_task", 4096, &keep_alive_params, 4, &keep_alive_handle);
 
 
     //comunicate loop
@@ -244,16 +251,49 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int sock, Semaphore
         //check return value
         if(return_f == COMMUNICATION_OK)
         {
-            //Check acknowledge if keep alive send
-            if(keep_alive_f && strcmp(rx_buffer, "ACK") == 0)
-            {
-                ESP_LOGI(LOCAL_FUNCTION_TAG, "Keep alive acknowledge received");
-                keep_alive_f=0;
-                goto NO_TRANSMIT;  
-            }
-
+            
             //Check commands
             seperate_commands(rx_buffer, command);
+
+            //Check acknowledge if keep alive send
+            if(keep_alive_f && strcmp(command[0], "ACK") == 0)
+            {
+                //check time to send
+                if(string_to_uint8(command[1], &temp) == ESP_OK)
+                {
+                    //if same time, dont change it
+                    if(temp*1000 == keep_alive_params.wait_time_s)
+                    {
+                        ESP_LOGI(LOCAL_FUNCTION_TAG, "Keep alive acknowledge received");
+                        keep_alive_f=0;
+                        goto NO_TRANSMIT; 
+                    }
+                    //if different change time to send
+                    else if(temp >= 5 && temp <= 30)
+                    {
+                        //reset task
+                        vTaskDelete(keep_alive_handle);
+                        keep_alive_handle = NULL;
+                        
+                        keep_alive_params.wait_time_s = temp*1000;
+                        xTaskCreate(keep_alive_notification_task, "keep_alive_notification_task", 4096, &keep_alive_params, 4, &keep_alive_handle);
+                        ESP_LOGW(LOCAL_FUNCTION_TAG, "Keep alive cknowledge received. Changed to %d seconds responce", temp);
+                        keep_alive_f=0;
+                        goto NO_TRANSMIT;
+                    }   
+                    else
+                    {
+                        ESP_LOGE(LOCAL_FUNCTION_TAG, "Keep alive time frame invalid: %d", temp);
+                        error_counter++;
+                    }
+                }
+                else
+                {
+                    ESP_LOGE(LOCAL_FUNCTION_TAG, "Keep alive time invalid: %s", command[1]);
+                    error_counter++;
+                }   
+            }
+
             //if WRITE
             if(strcmp(command[ID_C], ID_TCP) == 0 && strcmp(command[USER_C], USER_TCP) == 0 
                 && strcmp(command[OPERATION_C], WRITE_O) == 0)
@@ -324,21 +364,42 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int sock, Semaphore
                 {
                     if(reset_esp_handle == NULL)
                     {
-                        reset_params.flush_nvs_f = FALSE;
-                        ESP_LOGW(LOCAL_FUNCTION_TAG, "Reseting in %d second(s)", RESET_TIME_S);
-                        xTaskCreate(reset_esp_task, "reset_esp_task", 4096, &reset_params, 4, &reset_esp_handle);
+                        if(string_to_uint16(command[VALUE_C], &temp_16) == ESP_OK)
+                        {
+                            //check time frame
+                            if(temp_16 >= 5 && temp_16 <= 300)
+                            {
+                                reset_params.flush_nvs_f = FALSE;
+                                reset_params.seconds_to_reset = temp_16;
+                                ESP_LOGW(LOCAL_FUNCTION_TAG, "Reseting in %d second(s)", reset_params.seconds_to_reset);
+                                xTaskCreate(reset_esp_task, "reset_esp_task", 4096, &reset_params, 4, &reset_esp_handle);
+                                sprintf(tx_buffer, "%s:%d", ack_msg, reset_params.seconds_to_reset);
+                            }
+                            else
+                            {
+                                ESP_LOGE(LOCAL_FUNCTION_TAG, "Time frame invalid: %d", temp_16);
+                                sprintf(tx_buffer, "%s", nack_msg);
+                            }
+                        }
+                        else
+                        {
+                            ESP_LOGE(LOCAL_FUNCTION_TAG, "Time invalid: %d", reset_params.seconds_to_reset);
+                            sprintf(tx_buffer, "%s", nack_msg);
+                        }
                     }
                     else
+                    {
                         ESP_LOGE(LOCAL_FUNCTION_TAG, "Reset task already started");
-
-                    sprintf(tx_buffer, "%s", ack_msg);
+                        sprintf(tx_buffer, "%s", nack_msg);
+                    }
                 }
                 else if(strcmp(command[RESOURCE_C], FACTORY_RESET_R) == 0)
                 {
                     if(reset_esp_handle == NULL)
                     {
                         reset_params.flush_nvs_f = TRUE;
-                        ESP_LOGW(LOCAL_FUNCTION_TAG, "Reseting in %d second(s)", RESET_TIME_S);
+                        reset_params.seconds_to_reset = RESET_TIME_DEFAULT_S;
+                        ESP_LOGW(LOCAL_FUNCTION_TAG, "Reseting in %d second(s)", reset_params.seconds_to_reset);
                         xTaskCreate(reset_esp_task, "reset_esp_task", 4096, &reset_params, 4, &reset_esp_handle);
                     }
                     else
@@ -349,15 +410,25 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int sock, Semaphore
                 else if(strcmp(command[RESOURCE_C], CANCEL_RESET_R) == 0)
                 {
                     if(reset_esp_handle != NULL)
-                    {
+                    {;
                         ESP_LOGW(LOCAL_FUNCTION_TAG, "Reset cancelled"); 
                         vTaskDelete(reset_esp_handle);
                         reset_esp_handle = NULL;
+                        reset_params.seconds_to_reset = 0;
                     }
                     else
                         ESP_LOGE(LOCAL_FUNCTION_TAG, "Reset task has not been started"); 
 
                     sprintf(tx_buffer, "%s", ack_msg);
+                }
+                else if(strcmp(command[RESOURCE_C], KEY_R) == 0)
+                {
+                    //read nvs key
+                    if(write_nvs((char *)nvs_key_Y, command[VALUE_C], TRUE ) == ESP_OK)
+                        sprintf(tx_buffer, "%s:1", ack_msg);
+                    else
+                        sprintf(tx_buffer, "%s:0", ack_msg);
+
                 }
                 else
                 {
@@ -404,6 +475,18 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int sock, Semaphore
 
                     sprintf(tx_buffer, "%s:%s", ack_msg, local_buffer);
                 }
+                else if(strcmp(command[RESOURCE_C], RESET_R) == 0)
+                {
+                    sprintf(tx_buffer, "%s:%d", ack_msg, reset_params.seconds_to_reset);
+                }
+                else if(strcmp(command[RESOURCE_C], KEY_R) == 0)
+                {
+                    strncpy(local_buffer, "NULL", sizeof(local_buffer));
+                    if(read_nvs((char *)nvs_key_Y, local_buffer, sizeof(local_buffer), TRUE) == ESP_OK)
+                        key_xor_data(local_buffer);
+
+                    sprintf(tx_buffer, "%s:%s", ack_msg, local_buffer);
+                }
                 else
                 {
                     sprintf(tx_buffer, "%s", nack_msg);
@@ -442,31 +525,10 @@ uint8_t tcp_communicate_loop(const char *LOCAL_FUNCTION_TAG, int sock, Semaphore
                 error_counter++;
             }
 
-            build_command(tx_buffer, ID_TCP, USER_TCP, "K", "keep_alive", "\0");
+            build_command(tx_buffer, ID_TCP, USER_TCP, "K", "S", "keep_alive", "\0");
             transmit_data(LOCAL_FUNCTION_TAG, sock, tx_buffer);
             keep_alive_f = 1;
-            
-            /*DEPRECATED
-            return_f = receive_data(LOCAL_FUNCTION_TAG, sock, rx_buffer, sizeof(rx_buffer));
 
-            if(return_f == CONNECTION_CLOSED)
-                break;
-
-            if(return_f == COMMUNICATION_OK)
-            {
-                if(check_ack(LOCAL_FUNCTION_TAG, rx_buffer) == ESP_FAIL)
-                    error_counter++;
-            }
-            else if(return_f == CONNECTION_TIMEOUT)
-                error_counter++;
-            else
-            {
-                ESP_LOGE(LOCAL_FUNCTION_TAG, "Keep alive failed...");
-                error_counter++;
-            }
-
-            return_f = UNDEFINED;
-            */
         }
 
         //close socket if stop semaphore active
@@ -571,7 +633,7 @@ uint8_t receive_data(const char *LOCAL_FUNCTION_TAG, int sock, char *rx_buffer, 
 void transmit_data(const char *LOCAL_FUNCTION_TAG, int sock, char *tx_buffer)
 {
     ESP_LOGI(LOCAL_FUNCTION_TAG, "TX: %s", tx_buffer);
-    //strcat(tx_buffer, TERMINATION_DELIMITER_STR);
+    strcat(tx_buffer, TERMINATION_DELIMITER_STR);
 
     //encode_string(tx_buffer);
 
@@ -588,13 +650,13 @@ void transmit_data(const char *LOCAL_FUNCTION_TAG, int sock, char *tx_buffer)
 
 void keep_alive_notification_task(void *pvParameters)
 {
-    SemaphoreHandle_t keep_alive_semaphore = (SemaphoreHandle_t)pvParameters;
+    keep_alive_params_t *params = (keep_alive_params_t *)pvParameters;
 
     while(1)
     {
-        vTaskDelay(pdMS_TO_TICKS(KEEP_ALIVE_MS));
+        vTaskDelay(pdMS_TO_TICKS(params->wait_time_s));
 
-        xSemaphoreGive(keep_alive_semaphore);
+        xSemaphoreGive(params->keep_alive_semaphore);
     }
 
     vTaskDelete(NULL);
@@ -696,19 +758,34 @@ void encode_string(char *str)
     strcpy(str, buffer_coded);
 }
 
+void key_xor_data(char *data)
+{
+    char user[STR_LEN] = USER_TCP;
+    int counter = 0;
+    
+    for(int i=0; i < strlen(data); i++)
+    {
+        data[i] = data[i] ^ user[counter];
+        counter++;
+
+        if( counter >= strlen(user) )
+            counter = 0;
+    }
+}
+
 
 void reset_esp_task(void *pvParameters)
 {
     reset_params_t *params = (reset_params_t *)pvParameters;
-    uint16_t counter = RESET_TIME_S;
     esp_err_t err;
 
+    //reset n seconds
     do
     {
         vTaskDelay(pdMS_TO_TICKS(1000));
-        counter--;
-        ESP_LOGW(TAG_T, "Reseting in %d second(s)", counter);
-    }while(counter);
+        params->seconds_to_reset--;
+        ESP_LOGW(TAG_T, "Reseting in %d second(s)", params->seconds_to_reset);
+    }while(params->seconds_to_reset > 0);
 
     if(params->flush_nvs_f)
     {
